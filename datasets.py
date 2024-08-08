@@ -9,6 +9,8 @@ from torchvision.datasets.folder import ImageFolder, default_loader
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import create_transform
 
+from PIL import ImageFilter  # for GaussianBlur
+
 
 class INatDataset(ImageFolder):
     def __init__(self, root, train=True, year=2018, transform=None, target_transform=None,
@@ -107,3 +109,49 @@ def build_transform(is_train, args):
     t.append(transforms.ToTensor())
     t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
     return transforms.Compose(t)
+
+
+class GaussianBlur(object):
+    """
+    Apply Gaussian blur filter with the given sigma to the input PIL Image.
+    Args:
+        sigma (int): Desired Gaussian blur level sigma
+    Taken from: W:\dannyh\work\code\PyTorch\vggface2_lookdir\datasets\custom_transforms.
+   """
+
+    def __init__(self, sigma):
+        assert isinstance(sigma, int)
+        self.sigma = sigma
+
+    def __call__(self, img):
+        """
+        Args:
+            img (PIL Image): Image to be scaled.
+        Returns:
+            PIL Image: Rescaled image.
+        """
+        img = img.filter(ImageFilter.GaussianBlur(
+            radius=self.sigma))
+
+        return img
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(sigma={0})'.format(self.sigma)
+
+
+def add_blur_transform(ori_transforms, blur):
+    """
+
+    :param ori_transforms: Compose object with original sequence of transforms
+    :param blur:  Blur sigma
+    :return: New Compose object, with the blur-transform added to beginning.
+    """
+
+    # Original list of transforms (extract from Compose)
+    transform_list = ori_transforms.transforms
+
+    # Prepend the blur transform
+    updated_transform_list = [GaussianBlur(blur)] + transform_list
+
+    # Create a new Compose object with the updated list
+    return transforms.Compose(updated_transform_list)
