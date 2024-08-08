@@ -154,7 +154,7 @@ def get_args_parser():
     parser.add_argument('--attn-only', action='store_true') 
     
     # Dataset parameters
-    parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
+    parser.add_argument('--data-path', default='/home/projects/bagon/shared/imagenet', type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -162,11 +162,11 @@ def get_args_parser():
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
                         type=str, help='semantic granularity')
 
-    parser.add_argument('--output_dir', default='',
+    parser.add_argument('--output_dir', default='/home/projects/bagon/ilanaveh/code/Transformers/deit/out',
                         help='path where to save, empty for no saving')
     parser.add_argument('--model_name', default='original',
                         help='sub-directory for saving checkpoint')
-    
+
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
@@ -395,6 +395,7 @@ def main(args):
         criterion, teacher_model, args.distillation_type, args.distillation_alpha, args.distillation_tau
     )
 
+    args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     output_dir = Path(args.output_dir) / args.model_name
 
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
