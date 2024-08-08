@@ -190,7 +190,7 @@ def get_args_parser():
                         help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
 
-    # blur parameter"
+    # blur parameter
     parser.add_argument('--blur', default=0, type=int, help='Sigma of the Gaussian blur')
     return parser
 
@@ -250,9 +250,6 @@ def main(args):
     if args.ThreeAugment:
         data_loader_train.dataset.transform = new_data_aug_generator(args)
 
-    if args.blur:  # if blur > 0
-        data_loader_train.dataset.transform = add_blur_transform(data_loader_train.dataset.transform, args.blur)
-
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
         batch_size=int(1.5 * args.batch_size),
@@ -260,6 +257,10 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=False
     )
+
+    if args.blur:  # if blur > 0
+        data_loader_train.dataset.transform = add_blur_transform(data_loader_train.dataset.transform, args.blur)
+        data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -280,7 +281,6 @@ def main(args):
         img_size=args.input_size
     )
 
-                    
     if args.finetune:
         if args.finetune.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
