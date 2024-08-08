@@ -22,6 +22,7 @@ from engine import train_one_epoch, evaluate
 from losses import DistillationLoss
 from samplers import RASampler
 from augment import new_data_aug_generator
+from datasets import add_blur_transform
 
 import models
 import models_v2
@@ -164,7 +165,7 @@ def get_args_parser():
 
     parser.add_argument('--output_dir', default='/home/projects/bagon/ilanaveh/code/Transformers/deit/out',
                         help='path where to save, empty for no saving')
-    parser.add_argument('--model_name', default='original',
+    parser.add_argument('--model_name', default='deit',
                         help='sub-directory for saving checkpoint')
 
     parser.add_argument('--device', default='cuda',
@@ -188,6 +189,9 @@ def get_args_parser():
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+
+    # blur parameter"
+    parser.add_argument('--blur', default=0, type=int, help='Sigma of the Gaussian blur')
     return parser
 
 
@@ -245,6 +249,9 @@ def main(args):
     )
     if args.ThreeAugment:
         data_loader_train.dataset.transform = new_data_aug_generator(args)
+
+    if args.blur:  # if blur > 0
+        data_loader_train.dataset.transform = add_blur_transform(data_loader_train.dataset.transform, args.blur)
 
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
@@ -395,10 +402,13 @@ def main(args):
         criterion, teacher_model, args.distillation_type, args.distillation_alpha, args.distillation_tau
     )
 
+    args.model_name = args.model_name + '_blur{}'.format(args.blur) if args.blur else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     output_dir = Path(args.output_dir) / args.model_name
 
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
+
+    print("\n~~~ {} ~~~\n".format(args.model_name))
 
     if args.resume:
         if args.resume.startswith('https'):
