@@ -1,6 +1,8 @@
 """
 14/08/24
 Based on 'deit_plot_performance.py' in deit dir.
+Changes:
+- change list of metric options.
 """
 
 import json
@@ -14,29 +16,36 @@ def read_log_file(filepath):
     return log_data
 
 
-def plot_metric(models, metric):
+def plot_metric(models, metrics):
     plt.figure(figsize=(10, 6))
 
-    for mdl in models:
-        filepath = os.path.join('out', mdl, 'log.txt')
-        if os.path.exists(filepath):
-            log_data = read_log_file(filepath)
-            epochs = [entry['epoch'] for entry in log_data]
-            values = [entry[metric] for entry in log_data]
-            plt.plot(epochs, values, linestyle='-', label=mdl)
-        else:
-            print(f"Log file not found in directory: {mdl}")
+    for i, metric in enumerate(metrics):
+        plt.subplot(2, 2, i + 1)
 
-    plt.title(metric)
-    plt.xlabel('Epoch')
-    plt.ylabel(metric)
-    plt.grid(True)
-    plt.legend(title='Model')
+        for mdl in models:
+            filepath = os.path.join('out', mdl, 'log.txt')
+            if os.path.exists(filepath):
+                log_data = read_log_file(filepath)
+                epochs = [entry['epoch'] for entry in log_data]
+                values = [entry[metric] for entry in log_data]
+                plt.plot(epochs, values, linestyle='-', label=mdl)
+            else:
+                print(f"Log file not found in directory: {mdl}")
+
+        plt.title(metric)
+        plt.xlabel('Epoch')
+        plt.ylabel(metric)
+        plt.grid(True)
+        plt.legend(title='Model')
+
+    plt.tight_layout()
     plt.show()
 
 
 if __name__ == "__main__":
-    models = ['original', 'deit_blur8', 'deit_blur16']
-    metric = 'test_acc1'  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
+    models = ['untrained_block11_lr0.01', 'untrained_block11_lr0.001', 'ori_block11_lr0.01']
 
-    plot_metric(models, metric)
+    # Choose: train_acc / train_loss / test_acc / test_loss
+    metrics = ['train_loss', 'test_loss', 'train_acc', 'test_acc']
+
+    plot_metric(models, metrics)
