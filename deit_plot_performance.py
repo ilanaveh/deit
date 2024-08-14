@@ -9,7 +9,7 @@ def read_log_file(filepath):
     return log_data
 
 
-def plot_metric_multiple_dirs(models, metric):
+def plot_metric(models, metric):
     plt.figure(figsize=(10, 6))
 
     for mdl in models:
@@ -30,9 +30,8 @@ def plot_metric_multiple_dirs(models, metric):
     plt.show()
 
 
-# Usage example
 if __name__ == "__main__":
     models = ['original', 'deit_blur8', 'deit_blur16']
     metric = 'test_acc1'  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
 
-    plot_metric_multiple_dirs(models, metric)
+    plot_metric(models, metric)
