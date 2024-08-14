@@ -16,7 +16,7 @@ import json
 import shutil
 
 
-def create_model_probed(model_path, block_ind, num_classes=2):
+def create_model_probed(block_ind, num_classes=2, model_path=None):
     """
     create model based on a pretrained deit, with a FC layer after the chosen block from deit.
     Freeze all parameters
@@ -42,8 +42,10 @@ def create_model_probed(model_path, block_ind, num_classes=2):
     model.eval()
 
     # Load trained checkpoint:
-    deit_checkpoint = torch.load(os.path.join(model_path, 'checkpoint.pth'), map_location='cpu')
-    model.load_state_dict(deit_checkpoint['model'])
+    if model_path:
+        deit_checkpoint = torch.load(os.path.join(model_path, 'checkpoint.pth'), map_location='cpu')
+        model.load_state_dict(deit_checkpoint['model'])
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Remove all blocks downstream to chosen block: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     inds2rmv = range(len(model.blocks)-1, block_ind, -1)
 
@@ -67,8 +69,14 @@ def create_model_probed(model_path, block_ind, num_classes=2):
 def main():
     block_ind = 11  # probe output of this block.
     lr = .01
+    deit_model_name = 'original'  # insert None or '' for starting from untrained deit.
+    model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/out', deit_model_name)
 
-    model_name = f'ori_block{block_ind}_lr{lr}'
+    if deit_model_name:
+        model_name = f'{deit_model_name}_block{block_ind}_lr{lr}'
+    else:
+        model_name = f'untrained_block{block_ind}_lr{lr}'
+
     home_dir = '/home/projects/bagon/ilanaveh'
     dataset_path = osp.join(home_dir, 'data/AffectNet/train_set')
     data_dir = osp.join(dataset_path, 'images')
@@ -80,8 +88,11 @@ def main():
     nepochs = 100
     cuda = torch.cuda.is_available()
 
-    model_path = '/home/projects/bagon/ilanaveh/code/Transformers/deit/out/original'
-    model = create_model_probed(model_path, block_ind, num_classes=2)
+    if deit_model_name:
+        model = create_model_probed(block_ind, 2, model_path)
+    else:
+        model = create_model_probed(block_ind, 2)
+
     model.eval()
 
     cont_from_resume = osp.isfile(osp.join(output_dir, 'checkpoint.pth.tar'))
