@@ -41,6 +41,9 @@ def create_model_probed(model_path, block_ind, num_classes=2):
     model.cuda()
     model.eval()
 
+    # Load trained checkpoint:
+    deit_checkpoint = torch.load(os.path.join(model_path, 'checkpoint.pth'), map_location='cpu')
+    model.load_state_dict(deit_checkpoint['model'])
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Remove all blocks downstream to chosen block: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     inds2rmv = range(len(model.blocks)-1, block_ind, -1)
 
@@ -63,8 +66,9 @@ def create_model_probed(model_path, block_ind, num_classes=2):
 
 def main():
     block_ind = 11  # probe output of this block.
+    lr = .01
 
-    model_name = f'ori_block{block_ind}'
+    model_name = f'ori_block{block_ind}_lr{lr}'
     home_dir = '/home/projects/bagon/ilanaveh'
     dataset_path = osp.join(home_dir, 'data/AffectNet/train_set')
     data_dir = osp.join(dataset_path, 'images')
@@ -74,7 +78,6 @@ def main():
 
     batch_size = 32
     nepochs = 100
-    lr = .01
     cuda = torch.cuda.is_available()
 
     model_path = '/home/projects/bagon/ilanaveh/code/Transformers/deit/out/original'
