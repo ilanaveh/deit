@@ -6,3 +6,4 @@ checkpoints/
 
 # Specific for DEIT
 /out/
+/intermediate/out/
