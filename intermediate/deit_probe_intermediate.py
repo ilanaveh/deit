@@ -84,6 +84,20 @@ def main():
     model = create_model_probed(model_path, block_ind, num_classes=2)
     model.eval()
 
+    cont_from_resume = osp.isfile(osp.join(output_dir, 'checkpoint.pth.tar'))
+
+    if cont_from_resume:
+        inter_checkpoint = torch.load(osp.join(output_dir, 'checkpoint.pth.tar'))
+        print('>> Using saved checkpoint from {}'.format(osp.join(output_dir, 'checkpoint.pth.tar')))
+        model.load_state_dict(inter_checkpoint['model_state_dict'])
+        start_epoch = inter_checkpoint['epoch'] + 1
+        best_acc = inter_checkpoint['best_acc']
+        print('>> Loaded checkpoint, continuing from epoch {}'.format(start_epoch))
+    else:
+        print('>> file {} not found, starting from scratch'.format(osp.join(output_dir, 'checkpoint.pth.tar')))
+        start_epoch = 0
+        best_acc = 0
+
     criterion = nn.CrossEntropyLoss()
 
     if cuda:
@@ -117,9 +131,7 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 
-    best_acc = 0
-
-    for ep in range(nepochs):
+    for ep in range(start_epoch, nepochs):
         print('\nepoch', ep)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         Train        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
