@@ -68,7 +68,7 @@ def create_model_probed(block_ind, num_classes=2, model_path=None):
 
 def main():
     block_ind = 11  # probe output of this block.
-    lr = .01
+    lr = .001
     deit_model_name = 'original'  # insert None or '' for starting from untrained deit.
     model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/out', deit_model_name)
 
@@ -106,7 +106,7 @@ def main():
         print('>> Loaded checkpoint, continuing from epoch {}'.format(start_epoch))
     else:
         print('>> file {} not found, starting from scratch'.format(osp.join(output_dir, 'checkpoint.pth.tar')))
-        start_epoch = 0
+        start_epoch = 1
         best_acc = 0
 
     criterion = nn.CrossEntropyLoss()
@@ -142,13 +142,35 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Get stats for model before training: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    val_acc, val_loss = validate(val_loader, model, criterion)
+
+    best_acc = max(val_acc, best_acc)
+
+    log_stats = {'epoch': 0,
+                 'test_acc': val_acc,
+                 'test_loss': val_loss.item()}
+
+    with (output_dir / "log.txt").open("a") as f:
+        f.write(json.dumps(log_stats) + "\n")
+
+    save_checkpoint({
+        'epoch': 0,
+        'model_state_dict': model.state_dict(),
+        'optim_state_dict': optimizer.state_dict(),
+        'best_acc': best_acc,
+        'trainset_inds': train_dataset.anns_df.index
+    }, is_best=False, filedir=output_dir)
+
+    print(f'Epoch 0 (before beginning training): Checkpoint Saved.')
+
     for ep in range(start_epoch, nepochs):
         print('\nepoch', ep)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         Train        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         tr_acc, tr_loss = train(train_loader, model, criterion, optimizer)
 
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Val + write to TB: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         Val:       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         val_acc, val_loss = validate(val_loader, model, criterion)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Check if best: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
