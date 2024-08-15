@@ -14,6 +14,7 @@ import torchvision.transforms as T
 import numpy as np
 import json
 import shutil
+import argparse
 
 
 def create_model_probed(block_ind, num_classes=2, model_path=None):
@@ -67,31 +68,41 @@ def create_model_probed(block_ind, num_classes=2, model_path=None):
 
 
 def main():
-    block_ind = 11  # probe output of this block.
-    lr = .001
-    deit_model_name = 'original'  # insert None or '' for starting from untrained deit.
-    model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/out', deit_model_name)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch-size', default=32, type=int, metavar='N', help='mini-batch size (default: 2)')
+    # parser.add_argument('--blur', default=0, type=int, help='blur sigma of the model and inputs for the atts training')
+    parser.add_argument('--epochs', default=30, type=int, metavar='N', help='number of total epochs to run')
+    parser.add_argument('--lr', default=None, type=float, metavar='LR', help='initial learning rate, None for debug')
+    parser.add_argument('--block_ind', default=11, type=int, help='probe output of this block')
+    parser.add_argument('--deit_model_name', default=None, type=str, help='model name, or None for untrained detr')
 
-    if deit_model_name:
-        model_name = f'{deit_model_name}_block{block_ind}_lr{lr}'
+    args = parser.parse_args()
+
+    # When debugging - change model sufix, and set normal LR:
+    db_suf = '' if args.lr else '_db'
+    args.lr = args.lr if args.lr else .01
+
+    if args.deit_model_name:
+        deit_model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/out', args.deit_model_name)
+        model_name = f'{args.deit_model_name}_block{args.block_ind}_lr{args.lr}'
     else:
-        model_name = f'untrained_block{block_ind}_lr{lr}'
+        model_name = f'untrained_block{args.block_ind}_lr{args.lr}'
+
+    model_name = model_name + db_suf
 
     home_dir = '/home/projects/bagon/ilanaveh'
     dataset_path = osp.join(home_dir, 'data/AffectNet/train_set')
     data_dir = osp.join(dataset_path, 'images')
-    output_dir = Path(home_dir) / 'code/Transformers/deit/intermediate/out' / model_name
 
+    output_dir = Path(home_dir) / 'code/Transformers/deit/intermediate/out' / model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
-    batch_size = 32
-    nepochs = 100
     cuda = torch.cuda.is_available()
 
-    if deit_model_name:
-        model = create_model_probed(block_ind, 2, model_path)
+    if args.deit_model_name:
+        model = create_model_probed(args.block_ind, 2, deit_model_path)
     else:
-        model = create_model_probed(block_ind, 2)
+        model = create_model_probed(args.block_ind, 2)
 
     model.eval()
 
@@ -115,7 +126,7 @@ def main():
         model.cuda()
         criterion = criterion.cuda()
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-4)
 
     # --------------------------------------------- Datasets and Dataloaders: ------------------------------------------
     mean_rgb = [0.485, 0.456, 0.406]
@@ -139,8 +150,8 @@ def main():
 
     assert train_dataset.anns_df.merge(val_dataset.anns_df, on=['im_name']).empty  # validate train and val are distinct
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Get stats for model before training: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     val_acc, val_loss = validate(val_loader, model, criterion)
@@ -164,7 +175,7 @@ def main():
 
     print(f'Epoch 0 (before beginning training): Checkpoint Saved.')
 
-    for ep in range(start_epoch, nepochs):
+    for ep in range(start_epoch, args.epochs):
         print('\nepoch', ep)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         Train        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
