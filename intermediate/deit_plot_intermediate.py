@@ -8,6 +8,7 @@ Changes:
 import json
 import os
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def read_log_file(filepath):
@@ -27,9 +28,9 @@ def plot_metric(models, metrics):
             if os.path.exists(filepath):
                 log_data = read_log_file(filepath)
                 epochs = [entry['epoch'] for entry in log_data]
-                values = [entry[metric] for entry in log_data]
+                values = [entry[metric] if (metric in entry) else np.nan for entry in log_data]
                 plt.plot(epochs, values, linestyle='-', label=mdl)
-            else:
+            elif i == 0:
                 print(f"Log file not found in directory: {mdl}")
 
         plt.title(metric)
@@ -43,7 +44,7 @@ def plot_metric(models, metrics):
 
 
 if __name__ == "__main__":
-    models = ['untrained_block11_lr0.01', 'untrained_block11_lr0.001', 'ori_block11_lr0.01']
+    models = ['untrained_block11_lr0.01', 'untrained_block11_lr0.001', 'original_block11_lr0.001', 'ori_block11_lr0.01']
 
     # Choose: train_acc / train_loss / test_acc / test_loss
     metrics = ['train_loss', 'test_loss', 'train_acc', 'test_acc']
