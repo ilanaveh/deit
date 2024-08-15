@@ -48,7 +48,7 @@ def create_model_probed(block_ind, num_classes=2, model_path=None):
         model.load_state_dict(deit_checkpoint['model'])
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Remove all blocks downstream to chosen block: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    inds2rmv = range(len(model.blocks)-1, block_ind, -1)
+    inds2rmv = range(len(model.blocks) - 1, block_ind, -1)
 
     for i in inds2rmv:
         del model.blocks[i]
@@ -179,10 +179,10 @@ def main():
         print('\nepoch', ep)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         Train        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        tr_acc, tr_loss = train(train_loader, model, criterion, optimizer)
+        tr_acc, tr_loss = train(train_loader, model, criterion, optimizer, db_flag=(db_suf == '_db'))
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         Val:       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        val_acc, val_loss = validate(val_loader, model, criterion)
+        val_acc, val_loss = validate(val_loader, model, criterion, db_flag=(db_suf == '_db'))
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Check if best: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         is_best = val_acc > best_acc
@@ -237,7 +237,7 @@ def accuracy(output, target):
     return res
 
 
-def train(train_loader, model, criterion, optimizer):
+def train(train_loader, model, criterion, optimizer, db_flag=False):
     losses = AverageMeter()
     acc = AverageMeter()
 
@@ -245,7 +245,7 @@ def train(train_loader, model, criterion, optimizer):
     model.train()
 
     for i, sample in enumerate(train_loader):
-        if (i % 10) == 0:
+        if ((i % 10) == 0) and db_flag:
             print(f'{i} / {len(train_loader)}')
 
         input, target, im_name = sample
@@ -274,7 +274,7 @@ def train(train_loader, model, criterion, optimizer):
     return acc.avg, losses.avg
 
 
-def validate(val_loader, model, criterion):
+def validate(val_loader, model, criterion, db_flag=False):
     losses = AverageMeter()
     acc = AverageMeter()
 
@@ -283,7 +283,7 @@ def validate(val_loader, model, criterion):
 
     for i, sample in enumerate(val_loader):
 
-        if (i % 10) == 0:
+        if ((i % 10) == 0) and db_flag:
             print(f'{i} / {len(val_loader)}')
 
         input, target, im_name = sample
