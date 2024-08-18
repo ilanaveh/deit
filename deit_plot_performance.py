@@ -31,7 +31,7 @@ def plot_metric(models, metric):
 
 
 if __name__ == "__main__":
-    models = ['original', 'deit_blur8', 'deit_blur16']
+    models = ['original', 'deit_8gpu', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32']
     metric = 'test_acc1'  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
 
     plot_metric(models, metric)
