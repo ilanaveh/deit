@@ -120,26 +120,27 @@ def main():
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Get stats for model before training: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    val_acc, val_loss = validate(val_loader, model, criterion)
+    if start_epoch == 1:
+        val_acc, val_loss = validate(val_loader, model, criterion)
 
-    best_acc = max(val_acc, best_acc)
+        best_acc = max(val_acc, best_acc)
 
-    log_stats = {'epoch': 0,
-                 'test_acc': val_acc,
-                 'test_loss': val_loss.item()}
+        log_stats = {'epoch': 0,
+                     'test_acc': val_acc,
+                     'test_loss': val_loss.item()}
 
-    with (output_dir / "log.txt").open("a") as f:
-        f.write(json.dumps(log_stats) + "\n")
+        with (output_dir / "log.txt").open("a") as f:
+            f.write(json.dumps(log_stats) + "\n")
 
-    save_checkpoint({
-        'epoch': 0,
-        'model_state_dict': model.state_dict(),
-        'optim_state_dict': optimizer.state_dict(),
-        'best_acc': best_acc,
-        'trainset_inds': train_dataset.anns_df.index
-    }, is_best=False, filedir=output_dir)
+        save_checkpoint({
+            'epoch': 0,
+            'model_state_dict': model.state_dict(),
+            'optim_state_dict': optimizer.state_dict(),
+            'best_acc': best_acc,
+            'trainset_inds': train_dataset.anns_df.index
+        }, is_best=False, filedir=output_dir)
 
-    print(f'Epoch 0 (before beginning training): Checkpoint Saved.')
+        print(f'Epoch 0 (before beginning training): Checkpoint Saved.')
 
     for ep in range(start_epoch, args.epochs):
         print('\nepoch', ep)
