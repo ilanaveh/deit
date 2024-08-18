@@ -15,6 +15,7 @@ import numpy as np
 import json
 import shutil
 import argparse
+from PIL import ImageFilter
 
 
 def create_model_probed(block_ind, num_classes=2, model_path=None):
@@ -70,11 +71,12 @@ def create_model_probed(block_ind, num_classes=2, model_path=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', default=32, type=int, metavar='N', help='mini-batch size (default: 2)')
-    # parser.add_argument('--blur', default=0, type=int, help='blur sigma of the model and inputs for the atts training')
     parser.add_argument('--epochs', default=30, type=int, metavar='N', help='number of total epochs to run')
     parser.add_argument('--lr', default=None, type=float, metavar='LR', help='initial learning rate, None for debug')
     parser.add_argument('--block_ind', default=11, type=int, help='probe output of this block')
     parser.add_argument('--deit_model_name', default=None, type=str, help='model name, or None for untrained detr')
+    parser.add_argument('--deit_blur', default=0, type=int, help='blur sigma of the model')
+    parser.add_argument('--inp_blur', default=0, type=int, help='blur sigma of the inputs for atts training')
 
     args = parser.parse_args()
 
@@ -83,8 +85,18 @@ def main():
     args.lr = args.lr if args.lr else .01
 
     if args.deit_model_name:
+        # Change name of loaded model, according to its blur:
+        if args.deit_blur:
+            args.deit_model_name += '_blur{}'.format(args.deit_blur)
         deit_model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/out', args.deit_model_name)
+
+        # Define name for current atts-model:
         model_name = f'{args.deit_model_name}_block{args.block_ind}_lr{args.lr}'
+
+        # Change name of atts model, according to the input blur:
+        if args.inp_blur:
+            model_name += '_inpBlur{}'.format(args.inp_blur)
+
     else:
         model_name = f'untrained_block{args.block_ind}_lr{args.lr}'
 
@@ -132,7 +144,11 @@ def main():
     mean_rgb = [0.485, 0.456, 0.406]
     std_rgb = [0.229, 0.224, 0.225]
 
-    transforms = T.Compose([T.ToTensor(), T.Normalize(mean=mean_rgb, std=std_rgb)])
+    if args.inp_blur:
+        transforms = T.Compose([GaussianBlur(int(args.inp_blur)),
+                                T.ToTensor(), T.Normalize(mean=mean_rgb, std=std_rgb)])
+    else:
+        transforms = T.Compose([T.ToTensor(), T.Normalize(mean=mean_rgb, std=std_rgb)])
 
     train_dataset = AttsDatasetFixed(
         csv_file=osp.join(dataset_path, 'AffectNet_lbls_phase.csv'),
@@ -325,6 +341,34 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+
+class GaussianBlur(object):
+    """
+    Apply Gaussian blur filter with the given sigma to the input PIL Image.
+    Args:
+        sigma (int): Desired Gaussian blur level sigma
+    Taken from: W:\dannyh\work\code\PyTorch\vggface2_lookdir\datasets\custom_transforms.
+   """
+
+    def __init__(self, sigma):
+        assert isinstance(sigma, int)
+        self.sigma = sigma
+
+    def __call__(self, img):
+        """
+        Args:
+            img (PIL Image): Image to be scaled.
+        Returns:
+            PIL Image: Rescaled image.
+        """
+        img = img.filter(ImageFilter.GaussianBlur(
+            radius=self.sigma))
+
+        return img
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(sigma={0})'.format(self.sigma)
 
 
 if __name__ == '__main__':
