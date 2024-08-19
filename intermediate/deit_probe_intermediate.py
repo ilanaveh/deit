@@ -1,6 +1,8 @@
 """
 13/08/2024
 Probe intermediate layers from deit, and train on AffectNet.
+
+18/08/24 - optional: LR decay every X epochs, like implementation in DETR_Different_Resolutions/detr-main/main_blur.py
 """
 import os
 from pathlib import Path
@@ -27,12 +29,13 @@ def main():
     parser.add_argument('--deit_model_name', default=None, type=str, help='model name, or None for untrained detr')
     parser.add_argument('--deit_blur', default=0, type=int, help='blur sigma of the model')
     parser.add_argument('--inp_blur', default=0, type=int, help='blur sigma of the inputs for atts training')
+    parser.add_argument('--lr_drop', default=None, type=int, help='after how many epochs reduce LR by factor 10')
 
     args = parser.parse_args()
 
     # When debugging - change model sufix, and set normal LR:
     db_suf = '' if args.lr else '_db'
-    args.lr = args.lr if args.lr else 1e-5
+    args.lr = args.lr if args.lr else 1e-3
 
     if args.deit_model_name:
         # Change name of loaded model, according to its blur:
@@ -41,14 +44,21 @@ def main():
         deit_model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/out', args.deit_model_name)
 
         # Define name for current atts-model:
-        model_name = f'{args.deit_model_name}_block{args.block_ind}_lr{args.lr}'
-
-        # Change name of atts model, according to the input blur:
-        if args.inp_blur:
-            model_name += '_inpBlur{}'.format(args.inp_blur)
+        model_name = f'{args.deit_model_name}_block{args.block_ind}'
 
     else:
-        model_name = f'untrained_block{args.block_ind}_lr{args.lr}'
+        model_name = f'untrained_block{args.block_ind}'
+
+    # Change name of atts model, according to the LR & input blur:
+    if args.lr_drop:
+        lr_decay = True
+        model_name += '_lrDecay'
+    else:
+        lr_decay = False
+        model_name += '_lr{}'.format(args.lr)
+
+    if args.inp_blur:
+        model_name += '_inpBlur{}'.format(args.inp_blur)
 
     model_name = model_name + db_suf
 
@@ -89,6 +99,13 @@ def main():
         criterion = criterion.cuda()
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-4)
+    if lr_decay:
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_drop, gamma=0.1)
+
+    if cont_from_resume:
+        optimizer.load_state_dict(inter_checkpoint['optim_state_dict'])
+        if lr_decay:
+            lr_scheduler.load_state_dict(inter_checkpoint['lr_scheduler'])
 
     # --------------------------------------------- Datasets and Dataloaders: ------------------------------------------
     mean_rgb = [0.485, 0.456, 0.406]
@@ -127,18 +144,24 @@ def main():
 
         log_stats = {'epoch': 0,
                      'test_acc': val_acc,
-                     'test_loss': val_loss.item()}
+                     'test_loss': val_loss.item(),
+                     'lr': optimizer.param_groups[0]["lr"]}
 
         with (output_dir / "log.txt").open("a") as f:
             f.write(json.dumps(log_stats) + "\n")
 
-        save_checkpoint({
+        checkpoint_dict = {
             'epoch': 0,
             'model_state_dict': model.state_dict(),
             'optim_state_dict': optimizer.state_dict(),
             'best_acc': best_acc,
             'trainset_inds': train_dataset.anns_df.index
-        }, is_best=False, filedir=output_dir)
+        }
+
+        if lr_decay:
+            checkpoint_dict['lr_scheduler'] = lr_scheduler.state_dict()
+
+        save_checkpoint(checkpoint_dict, is_best=False, filedir=output_dir)
 
         print(f'Epoch 0 (before beginning training): Checkpoint Saved.')
 
@@ -147,7 +170,8 @@ def main():
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         Train        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         tr_acc, tr_loss = train(train_loader, model, criterion, optimizer, db_flag=(db_suf == '_db'))
-
+        if lr_decay:
+            lr_scheduler.step()
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         Val:       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         val_acc, val_loss = validate(val_loader, model, criterion, db_flag=(db_suf == '_db'))
 
@@ -167,18 +191,23 @@ def main():
                      'train_loss': tr_loss.item(),
                      'test_acc': val_acc,
                      'test_loss': val_loss.item(),
-                     'is_best': int(is_best)}
+                     'is_best': int(is_best),
+                     'lr': optimizer.param_groups[0]["lr"]}
 
         with (output_dir / "log.txt").open("a") as f:
             f.write(json.dumps(log_stats) + "\n")
 
-        save_checkpoint({
+        checkpoint_dict = {
             'epoch': ep,
             'model_state_dict': model.state_dict(),
             'optim_state_dict': optimizer.state_dict(),
             'best_acc': best_acc,
             'trainset_inds': train_dataset.anns_df.index
-        }, is_best=is_best, filedir=output_dir)
+        }
+
+        if lr_decay:
+            checkpoint_dict['lr_scheduler'] = lr_scheduler.state_dict()
+        save_checkpoint(checkpoint_dict, is_best=is_best, filedir=output_dir)
 
         print(f'Epoch {ep}: Checkpoint Saved.')
 
@@ -283,8 +312,6 @@ def train(train_loader, model, criterion, optimizer, db_flag=False):
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
-
-        # print devices of model, input and labels:
         optimizer.step()
 
     return acc.avg, losses.avg
