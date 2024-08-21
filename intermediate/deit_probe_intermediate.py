@@ -35,7 +35,7 @@ def main():
 
     # When debugging - change model sufix, and set normal LR:
     db_suf = '' if args.lr else '_db'
-    args.lr = args.lr if args.lr else 1e-3
+    args.lr = args.lr if args.lr else 1e-4
 
     if args.deit_model_name:
         # Change name of loaded model, according to its blur:
