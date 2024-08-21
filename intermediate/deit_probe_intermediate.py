@@ -239,7 +239,7 @@ def create_model_probed(block_ind, num_classes=2, model_path=None):
 
     # Load trained checkpoint:
     if model_path:
-        deit_checkpoint = torch.load(os.path.join(model_path, 'checkpoint.pth'), map_location='cpu')
+        deit_checkpoint = torch.load(os.path.join(model_path, 'checkpoint_epoch237.pth'), map_location='cpu')
         model.load_state_dict(deit_checkpoint['model'])
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Remove all blocks downstream to chosen block: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
