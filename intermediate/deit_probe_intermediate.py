@@ -66,7 +66,7 @@ def main():
     dataset_path = osp.join(home_dir, 'data/AffectNet/train_set')
     data_dir = osp.join(dataset_path, 'images')
 
-    output_dir = Path(home_dir) / 'code/Transformers/deit/intermediate/out' / model_name
+    output_dir = Path(home_dir) / 'code/Transformers/deit/intermediate/out/start_from_epoch237' / model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
     cuda = torch.cuda.is_available()
@@ -242,6 +242,7 @@ def create_model_probed(block_ind, num_classes=2, model_path=None):
         deit_checkpoint = torch.load(os.path.join(model_path, 'checkpoint_epoch237.pth'), map_location='cpu')
         model.load_state_dict(deit_checkpoint['model'])
 
+        print(f">> Starting from deit model: '{model_path.split('/out/')[1]}', epoch: {deit_checkpoint['epoch']}")
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Remove all blocks downstream to chosen block: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     inds2rmv = range(len(model.blocks) - 1, block_ind, -1)
 
