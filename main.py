@@ -194,6 +194,9 @@ def get_args_parser():
 
     # blur parameter
     parser.add_argument('--blur', default=0, type=int, help='Sigma of the Gaussian blur')
+
+    # suffix for model name
+    parser.add_argument('--suf', default='', type=str, help='suffix for model name (would be added with "_"')
     return parser
 
 
@@ -406,6 +409,7 @@ def main(args):
 
     args.model_name = args.model_name + '_blur{}'.format(args.blur) if args.blur else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
+    args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     output_dir = Path(args.output_dir) / args.model_name
 
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
@@ -467,7 +471,6 @@ def main(args):
                     'scaler': loss_scaler.state_dict(),
                     'args': args,
                 }, checkpoint_path)
-             
 
         test_stats = evaluate(data_loader_val, model, device)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
