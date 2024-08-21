@@ -6,5 +6,6 @@ checkpoints/
 
 # Specific for DEIT
 /out/
+/figures/
 /intermediate/out/
 /intermediate/figures/
