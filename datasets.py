@@ -10,6 +10,7 @@ from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import create_transform
 
 from PIL import ImageFilter  # for GaussianBlur
+import random  # for GaussianBlurRand
 
 
 class INatDataset(ImageFolder):
@@ -139,11 +140,42 @@ class GaussianBlur(object):
         return self.__class__.__name__ + '(sigma={0})'.format(self.sigma)
 
 
-def add_blur_transform(ori_transforms, blur):
+class GaussianBlurRand(object):
     """
+    Apply Gaussian blur filter to the input PIL Image, with a rondom choice between self.sigma_min-self.sigma_max.
+    if no sigma_max is given (or if sigma_min = sigma_max) -> same as regular GaussianBlur.
+    Taken from: DeepLabv3FineTuning-disClasses/pretraining_resnet/pretrain_resnet_var_blurs.py.
+    Args:
+        sigma_min (int): Desired Gaussian blur level sigma / lower bound
+        sigma_max (int; optional): Upper bound.
+   """
 
+    def __init__(self, sigma_min=0, sigma_max=None):
+        assert isinstance(sigma_min, int)
+        self.is_range = bool(sigma_max) & (sigma_min != sigma_max)
+        self.sigma_min = sigma_min
+        self.sigma_max = sigma_max
+
+    def __call__(self, img):
+        """
+        Args:
+            img (PIL Image): Image to be scaled.
+        Returns:
+            PIL Image: Rescaled image.
+        """
+
+        radius = random.randint(self.sigma_min, self.sigma_max) if self.is_range else self.sigma_min
+        img = img.filter(ImageFilter.GaussianBlur(radius=radius))
+
+        return img
+
+
+def add_blur_transform(ori_transforms, blur, blur_max=None):
+    """
+    Add GaussianBlur / GaussianBlurRand transform to the Transforms Compose object.
     :param ori_transforms: Compose object with original sequence of transforms
-    :param blur:  Blur sigma
+    :param blur: Blur sigma
+    :param blur_max: (optional) use GaussianBlurRand with a range of sigmas to choose from (from blur to blur_max).
     :return: New Compose object, with the blur-transform added to beginning.
     """
 
@@ -151,7 +183,10 @@ def add_blur_transform(ori_transforms, blur):
     transform_list = ori_transforms.transforms
 
     # Prepend the blur transform
-    updated_transform_list = [GaussianBlur(blur)] + transform_list
+    if blur_max:
+        updated_transform_list = [GaussianBlurRand(blur, blur_max)] + transform_list
+    else:
+        updated_transform_list = [GaussianBlur(blur)] + transform_list
 
     # Create a new Compose object with the updated list
     return transforms.Compose(updated_transform_list)
