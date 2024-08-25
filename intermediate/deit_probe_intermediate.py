@@ -52,7 +52,7 @@ def main():
     # Change name of atts model, according to the LR & input blur:
     if args.lr_drop:
         lr_decay = True
-        model_name += '_lrDecay'
+        model_name += '_lrDecayFrom{}'.format(args.lr)
     else:
         lr_decay = False
         model_name += '_lr{}'.format(args.lr)
