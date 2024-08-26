@@ -194,6 +194,7 @@ def get_args_parser():
 
     # blur parameter
     parser.add_argument('--blur', default=0, type=int, help='Sigma of the Gaussian blur')
+    parser.add_argument('--blur_max', default=None, type=int, help='For Variable-Blur training: max sigma')
 
     # suffix for model name
     parser.add_argument('--suf', default='', type=str, help='suffix for model name (would be added with "_"')
@@ -264,8 +265,21 @@ def main(args):
     )
 
     if args.blur:  # if blur > 0
-        data_loader_train.dataset.transform = add_blur_transform(data_loader_train.dataset.transform, args.blur)
+        data_loader_train.dataset.transform = \
+            add_blur_transform(data_loader_train.dataset.transform, args.blur, args.blur_max)
         data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
+
+    if args.blur_max:
+        data_loader_val_blur_max = torch.utils.data.DataLoader(
+            dataset_val, sampler=sampler_val,
+            batch_size=int(1.5 * args.batch_size),
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=False
+        )
+
+        data_loader_val_blur_max.dataset.transform = \
+            add_blur_transform(data_loader_val.dataset.transform, args.blur_max)
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -407,7 +421,8 @@ def main(args):
         criterion, teacher_model, args.distillation_type, args.distillation_alpha, args.distillation_tau
     )
 
-    args.model_name = args.model_name + '_blur{}'.format(args.blur) if args.blur else args.model_name
+    args.model_name = args.model_name + '_blur{}'.format(args.blur)
+    args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     output_dir = Path(args.output_dir) / args.model_name
@@ -440,7 +455,14 @@ def main(args):
             lr_scheduler.step(args.start_epoch)
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+        print(f"Accuracy of the network on the {len(dataset_val)} test images with blur "
+              f"{args.blur}: {test_stats['acc1']:.1f}%")
+
+        if args.blur_max:
+            test_stats_blur_max = evaluate(data_loader_val_blur_max, model, device)
+            print(f"Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
+                  f"({args.blur_max}): {test_stats_blur_max['acc1']:.1f}%")
+
         return
 
     print(f"Start training for {args.epochs} epochs")
@@ -473,7 +495,13 @@ def main(args):
                 }, checkpoint_path)
 
         test_stats = evaluate(data_loader_val, model, device)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+        print(f"Accuracy of the network on the {len(dataset_val)} test images with blur "
+              f"{args.blur}: {test_stats['acc1']:.1f}%")
+
+        if args.blur_max:
+            test_stats_blur_max = evaluate(data_loader_val_blur_max, model, device)
+            print(f"Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
+                  f"({args.blur_max}): {test_stats_blur_max['acc1']:.1f}%")
         
         if max_accuracy < test_stats["acc1"]:
             max_accuracy = test_stats["acc1"]
@@ -496,6 +524,10 @@ def main(args):
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
+
+        if args.max_blur:
+            log_stats = {**log_stats,
+                         **{f'test_blur_max_{k}': v for k, v in test_stats_blur_max.items()}}
 
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
