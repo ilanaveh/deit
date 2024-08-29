@@ -60,6 +60,9 @@ def main():
     if args.inp_blur:
         model_name += '_inpBlur{}'.format(args.inp_blur)
 
+    # change name of atts model, according to batch size:
+    model_name += '_BS{}'.format(args.batch_size)
+
     model_name = model_name + db_suf
 
     home_dir = '/home/projects/bagon/ilanaveh'
