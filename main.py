@@ -525,7 +525,7 @@ def main(args):
                      'epoch': epoch,
                      'n_parameters': n_parameters}
 
-        if args.max_blur:
+        if args.blur_max:
             log_stats = {**log_stats,
                          **{f'test_blur_max_{k}': v for k, v in test_stats_blur_max.items()}}
 
