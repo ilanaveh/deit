@@ -270,8 +270,10 @@ def main(args):
         data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
 
     if args.blur_max:
+        dataset_val_blur_max, _ = build_dataset(is_train=False, args=args)
+
         data_loader_val_blur_max = torch.utils.data.DataLoader(
-            dataset_val, sampler=sampler_val,
+            dataset_val_blur_max, sampler=sampler_val,
             batch_size=int(1.5 * args.batch_size),
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
@@ -279,7 +281,7 @@ def main(args):
         )
 
         data_loader_val_blur_max.dataset.transform = \
-            add_blur_transform(data_loader_val.dataset.transform, args.blur_max)
+            add_blur_transform(data_loader_val_blur_max.dataset.transform, args.blur_max)
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
