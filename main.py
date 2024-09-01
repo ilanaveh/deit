@@ -264,7 +264,7 @@ def main(args):
         drop_last=False
     )
 
-    if args.blur:  # if blur > 0
+    if args.blur or args.blur_max:  # if blur > 0 or blur_max was given (and then transform is added even for blur=0).
         data_loader_train.dataset.transform = \
             add_blur_transform(data_loader_train.dataset.transform, args.blur, args.blur_max)
         data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
