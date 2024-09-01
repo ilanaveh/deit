@@ -265,6 +265,7 @@ def create_model_probed(block_ind, num_classes=2, model_path=None):
 
     return model
 
+
 def save_checkpoint(state, is_best, filedir='.'):
     filename = os.path.join(filedir, 'checkpoint.pth.tar')
     torch.save(state, filename)
