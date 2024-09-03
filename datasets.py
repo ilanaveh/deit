@@ -156,26 +156,37 @@ class GaussianBlurRand(object):
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
 
-    def __call__(self, img):
+    def __call__(self, img, return_blur=False):
         """
         Args:
             img (PIL Image): Image to be scaled.
+            return_blur (bool): Whether to return the chosen blur sigma.
         Returns:
             PIL Image: Rescaled image.
+            if return_blur=True: also return the chosen blur sigma.
         """
 
         radius = random.randint(self.sigma_min, self.sigma_max) if self.is_range else self.sigma_min
         img = img.filter(ImageFilter.GaussianBlur(radius=radius))
+        if return_blur:
+            return img, radius
+        else:
+            return img
 
-        return img
+    def __repr__(self):
+        if self.is_range:
+            return self.__class__.__name__ + '(sigma={}-{})'.format(self.sigma_min, self.sigma_max)
+        else:
+            return self.__class__.__name__ + '(sigma={})'.format(self.sigma_min)
 
 
-def add_blur_transform(ori_transforms, blur, blur_max=None):
+def add_blur_transform(ori_transforms, blur, blur_max=None, use_custom_compose=False):
     """
     Add GaussianBlur / GaussianBlurRand transform to the Transforms Compose object.
     :param ori_transforms: Compose object with original sequence of transforms
     :param blur: Blur sigma
     :param blur_max: (optional) use GaussianBlurRand with a range of sigmas to choose from (from blur to blur_max).
+    :param use_custom_compose: (bool) whether to use CustomCompose (that logs blurs) instead of regular Compose.
     :return: New Compose object, with the blur-transform added to beginning.
     """
 
@@ -189,4 +200,78 @@ def add_blur_transform(ori_transforms, blur, blur_max=None):
         updated_transform_list = [GaussianBlur(blur)] + transform_list
 
     # Create a new Compose object with the updated list
-    return transforms.Compose(updated_transform_list)
+    if use_custom_compose:
+        return CustomCompose(updated_transform_list)
+    else:
+        return transforms.Compose(updated_transform_list)
+
+
+class BlurDataset(ImageFolder):
+    """
+    Based on original ImageFolder, but return the applied blur level in addition to the image.
+    """
+    def __init__(
+            self,
+            root,
+            transform,
+            return_blur):
+
+        super().__init__(root, transform=transform)
+        self.return_blur = return_blur
+
+    # Override the __getitem__ method, s.t. the blur level applied for each image is returned:
+    def __getitem__(self, index):
+
+        # 1. Copy the original ImageFolder getitem method, but add applied_blur as output if GaussianBlurRand is used:
+        path, target = self.samples[index]
+        sample = self.loader(path)
+        if self.transform is not None:
+            if self.return_blur:
+                sample, applied_blur = self.transform(sample)
+            else:
+                sample = self.transform(sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        # 2. return blur level, in addition to sample & target.
+        if self.return_blur:
+            return sample, target, applied_blur
+        else:
+            return sample, target
+
+
+def build_dataset_blur(is_train, args, return_blur=False):
+    """
+    based on 'build_dataset', but calls BlurDataset instead of ImageFolder.
+    """
+    transform = build_transform(is_train, args)
+
+    assert args.data_set == 'IMNET'  # assume using imagenet.
+
+    root = os.path.join(args.data_path, 'train' if is_train else 'val')
+    dataset = BlurDataset(root, transform=transform, return_blur=return_blur)
+    nb_classes = 1000
+
+    return dataset, nb_classes
+
+
+class CustomCompose:
+    """
+    Based on torch's Compose (torchvision.transforms.transforms.Compose), but change __call__, s.t. it can receive the
+    actual blur level used in GaussianBlurRand.
+    """
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, img):
+        for t in self.transforms:
+            if isinstance(t, GaussianBlurRand):
+                img, applied_blur = t(img, return_blur=True)
+            else:
+                img = t(img)
+
+        if any(isinstance(t, GaussianBlurRand) for t in self.transforms):
+            return img, applied_blur
+        else:
+            return img
+
