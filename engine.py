@@ -30,7 +30,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     if args.cosub:
         criterion = torch.nn.BCEWithLogitsLoss()
         
-    for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
+    for sample in metric_logger.log_every(data_loader, print_freq, header):
+
+        if len(sample) == 2:
+            samples, targets = sample
+        else:
+            samples, targets, applied_blurs = sample
+
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
