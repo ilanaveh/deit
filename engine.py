@@ -14,7 +14,6 @@ from timm.utils import accuracy, ModelEma
 
 from losses import DistillationLoss
 import utils
-from collections import Counter
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
@@ -88,10 +87,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     if bool(args.blur_max):
-        # Count amount of each blur:
-        count_blurs = Counter(applied_blurs_all)
-        count_blurs_dict = {b: count_blurs.get(b, 0) for b in range(args.blur_max+1)}
-        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, count_blurs_dict
+        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, applied_blurs_all
     else:
         return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
