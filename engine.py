@@ -14,6 +14,7 @@ from timm.utils import accuracy, ModelEma
 
 from losses import DistillationLoss
 import utils
+from collections import Counter
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
@@ -29,13 +30,17 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     
     if args.cosub:
         criterion = torch.nn.BCEWithLogitsLoss()
-        
+
+    if bool(args.blur_max):
+        applied_blurs_all = []
+
     for sample in metric_logger.log_every(data_loader, print_freq, header):
 
         if len(sample) == 2:
             samples, targets = sample
         else:
             samples, targets, applied_blurs = sample
+            applied_blurs_all += applied_blurs.tolist()
 
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
@@ -82,7 +87,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    if bool(args.blur_max):
+        # Count amount of each blur:
+        count_blurs = Counter(applied_blurs_all)
+        count_blurs_dict = {b: count_blurs.get(b, 0) for b in range(args.blur_max+1)}
+        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, count_blurs_dict
+    else:
+        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
 @torch.no_grad()
