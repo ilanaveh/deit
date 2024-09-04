@@ -198,6 +198,11 @@ def get_args_parser():
 
     # suffix for model name
     parser.add_argument('--suf', default='', type=str, help='suffix for model name (would be added with "_"')
+
+    # For logging example images
+    parser.add_argument('--ims2save_pth', default='/home/projects/bagon/ilanaveh/code/Transformers/deit/'
+                                                  'ims2save_for_logging/ims2save.txt',
+                        type=str, help='path to text file with list of images to save.')
     return parser
 
 
