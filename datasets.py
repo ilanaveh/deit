@@ -11,7 +11,8 @@ from timm.data import create_transform
 
 from PIL import ImageFilter  # for GaussianBlur
 import random  # for GaussianBlurRand
-
+import matplotlib.pyplot as plt  # for saving example images.
+import numpy as np  # for saving example images.
 
 class INatDataset(ImageFolder):
     def __init__(self, root, train=True, year=2018, transform=None, target_transform=None,
@@ -214,10 +215,14 @@ class BlurDataset(ImageFolder):
             self,
             root,
             transform,
-            return_blur):
+            return_blur,
+            chosen_imgs_lst=[],
+            save_imgs_pth=''):
 
         super().__init__(root, transform=transform)
         self.return_blur = return_blur
+        self.chosen_imgs_lst = chosen_imgs_lst
+        self.save_imgs_pth = save_imgs_pth
 
     # Override the __getitem__ method, s.t. the blur level applied for each image is returned:
     def __getitem__(self, index):
@@ -232,6 +237,27 @@ class BlurDataset(ImageFolder):
                 sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
+
+        # Save example images:
+        im_nm = path.split('/')[-1].split('.JPEG')[0]
+        if self.chosen_imgs_lst and (im_nm in self.chosen_imgs_lst) and self.save_imgs_pth:
+            im_save_nm = '{}_blur{}.png'.format(im_nm, applied_blur) if self.return_blur else '{}.png'.format(im_nm)
+            if not os.path.isfile(os.path.join(self.save_imgs_pth, im_save_nm)):
+                sample_norm = (sample-sample.min()) / (sample.max()-sample.min()) * 255
+                sample_numpy = np.array(sample_norm.permute(1, 2, 0)).astype('uint8')
+                plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm), sample_numpy)
+                # For creating image with only Blur transform:
+                if isinstance(self.transform.transforms[0], GaussianBlurRand) or \
+                        isinstance(self.transform.transforms[0], GaussianBlur):
+                    sample_for_blur = self.loader(path)
+                    if self.return_blur:
+                        blur_trans = GaussianBlur(applied_blur)
+                    else:
+                        blur_trans = self.transform.transforms[0]
+                    sample_blurred = blur_trans(sample_for_blur)
+                    sample_blur_numpy = np.array(sample_blurred)
+                    plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm.replace('.png', '_onlyBlur.png')),
+                               sample_blur_numpy)
 
         # 2. return blur level, in addition to sample & target.
         if self.return_blur:
@@ -249,7 +275,15 @@ def build_dataset_blur(is_train, args, return_blur=False):
     assert args.data_set == 'IMNET'  # assume using imagenet.
 
     root = os.path.join(args.data_path, 'train' if is_train else 'val')
-    dataset = BlurDataset(root, transform=transform, return_blur=return_blur)
+
+    if args.chosen_imgs_pth and os.path.isfile(args.chosen_imgs_pth):
+        with open(args.chosen_imgs_pth, "r") as file:
+            list_json = file.read()
+        chosen_imgs_lst = json.loads(list_json)
+    else:
+        chosen_imgs_lst = []
+    dataset = BlurDataset(root, transform=transform, return_blur=return_blur, chosen_imgs_lst=chosen_imgs_lst,
+                          save_imgs_pth=os.path.join(args.output_dir, args.model_name))
     nb_classes = 1000
 
     return dataset, nb_classes
