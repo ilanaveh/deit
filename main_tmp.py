@@ -269,33 +269,43 @@ def main(args):
     if args.ThreeAugment:
         data_loader_train.dataset.transform = new_data_aug_generator(args)
 
-    data_loader_val = torch.utils.data.DataLoader(
-        dataset_val, sampler=sampler_val,
-        batch_size=int(1.5 * args.batch_size),
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=False
-    )
-
-    if args.blur or args.blur_max:  # if blur > 0
-        data_loader_train.dataset.transform = \
-            add_blur_transform(data_loader_train.dataset.transform, args.blur, args.blur_max,
-                               use_custom_compose=bool(args.blur_max))
-        data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
-
     if args.blur_max:
-        dataset_val_blur_max, _ = build_dataset(is_train=False, args=args)
+        # 1. Add blur transform to train dataloader, with range of blurs:
+        data_loader_train.dataset.transform = \
+            add_blur_transform(data_loader_train.dataset.transform, args.blur, blur_max=args.blur_max,
+                               use_custom_compose=True)
 
-        data_loader_val_blur_max = torch.utils.data.DataLoader(
-            dataset_val_blur_max, sampler=sampler_val,
+        # 2. Create val dataloaders for each of the blurs in range:
+        datasets_val_blurs = {b: build_dataset(is_train=False, args=args)[0]
+                              for b in range(args.blur, args.blur_max + 1)}
+
+        dataloaders_val_blurs = {b:
+            torch.utils.data.DataLoader(
+                datasets_val_blurs[b], sampler=sampler_val,
+                batch_size=int(1.5 * args.batch_size),
+                num_workers=args.num_workers,
+                pin_memory=args.pin_mem,
+                drop_last=False
+            ) for b in range(args.blur, args.blur_max + 1)}
+
+        for b in range(args.blur, args.blur_max + 1):
+            dataloaders_val_blurs[b].dataset.transform = \
+                add_blur_transform(dataloaders_val_blurs[b].dataset.transform, b)
+
+    else:
+        # Create single val dataloader:
+        data_loader_val = torch.utils.data.DataLoader(
+            dataset_val, sampler=sampler_val,
             batch_size=int(1.5 * args.batch_size),
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
             drop_last=False
         )
 
-        data_loader_val_blur_max.dataset.transform = \
-            add_blur_transform(data_loader_val_blur_max.dataset.transform, args.blur_max)
+        if args.blur:
+            # Add blur transform to train & val dataloaders (single blur):
+            data_loader_train.dataset.transform = add_blur_transform(data_loader_train.dataset.transform, args.blur)
+            data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -462,14 +472,17 @@ def main(args):
                     loss_scaler.load_state_dict(checkpoint['scaler'])
             lr_scheduler.step(args.start_epoch)
     if args.eval:
-        test_stats = evaluate(data_loader_val, model, device)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images with blur "
-              f"{args.blur}: {test_stats['acc1']:.1f}%")
-
         if args.blur_max:
-            test_stats_blur_max = evaluate(data_loader_val_blur_max, model, device)
+            test_stats = evaluate(dataloaders_val_blurs[args.blur], model, device)
+            test_stats_blur_max = evaluate(datasets_val_blurs[args.blur_max], model, device)
+
             print(f"Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
                   f"({args.blur_max}): {test_stats_blur_max['acc1']:.1f}%")
+        else:
+            test_stats = evaluate(data_loader_val, model, device)
+
+        print(f"Accuracy of the network on the {len(dataset_val)} test images with blur "
+              f"{args.blur}: {test_stats['acc1']:.1f}%")
 
         return
 
@@ -513,17 +526,27 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats = evaluate(data_loader_val, model, device)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images with blur "
-              f"{args.blur}: {test_stats['acc1']:.1f}%")
-
         if args.blur_max:
-            test_stats_blur_max = evaluate(data_loader_val_blur_max, model, device)
-            print(f"Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
-                  f"({args.blur_max}): {test_stats_blur_max['acc1']:.1f}%")
+            test_stats_blurs = {b: evaluate(dataloaders_val_blurs[b], model, device)
+                                for b in range(args.blur, args.blur_max + 1)}
 
-        if max_accuracy < test_stats["acc1"]:
-            max_accuracy = test_stats["acc1"]
+            print(f"Accuracy of the network on the {len(dataset_val)} test images with minimal blur "
+                  f"({args.blur}): {test_stats_blurs[args.blur]['acc1']:.1f}%")
+
+            print(f"Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
+                  f"({args.blur_max}): {test_stats_blurs[args.blur_max]['acc1']:.1f}%")
+
+            current_acc = test_stats_blurs[args.blur]["acc1"]
+
+        else:
+            test_stats = evaluate(data_loader_val, model, device)
+            print(f"Accuracy of the network on the {len(dataset_val)} test images with blur "
+                  f"{args.blur}: {test_stats['acc1']:.1f}%")
+
+            current_acc = test_stats["acc1"]
+
+        if max_accuracy < current_acc:
+            max_accuracy = current_acc
             if args.output_dir:
                 checkpoint_paths = [output_dir / 'best_checkpoint.pth']
                 for checkpoint_path in checkpoint_paths:
@@ -539,18 +562,25 @@ def main(args):
 
         print(f'Max accuracy: {max_accuracy:.2f}%')
 
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                     **{f'test_{k}': v for k, v in test_stats.items()},
-                     'epoch': epoch,
-                     'n_parameters': n_parameters}
-
         if args.blur_max:
             # Count amount of each blur:
             count_blurs = Counter(applied_blurs_all)
             count_blurs_dict = {b: count_blurs.get(b, 0) for b in range(args.blur_max + 1)}
-            log_stats = {**log_stats,
-                         **{f'test_blur_max_{k}': v for k, v in test_stats_blur_max.items()},
+
+            log_stats = {'epoch': epoch,
+                         **{f'train_{k}': v for k, v in train_stats.items()},
+                         # k1 - blur level (keys in 'test_stats_blurs'); k2 - log metric (acc1, loss, etc.);
+                         # v - value of metric; [blur_dict - test_stats for current blur.]
+                         **{f'test_blur_{k1}_{k2}': v for k1, blur_dict in test_stats_blurs.items()
+                            for k2, v in blur_dict.items()},
+                         'n_parameters': n_parameters,
                          **{f'count_blur_{k}': v for k, v in count_blurs_dict.items()}}
+
+        else:
+            log_stats = {'epoch': epoch,
+                         **{f'train_{k}': v for k, v in train_stats.items()},
+                         **{f'test_{k}': v for k, v in test_stats.items()},
+                         'n_parameters': n_parameters}
 
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
