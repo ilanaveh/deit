@@ -10,3 +10,8 @@ checkpoints/
 /intermediate/out/
 /intermediate/figures/
 /ims2save_for_logging/
+/intermediate/board/
+/out_from_try_parallel/
+/out_from_debug_image_blur_transform/
+Thumbs.db
+.idea/
