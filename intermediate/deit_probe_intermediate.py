@@ -18,6 +18,8 @@ import json
 import shutil
 import argparse
 from PIL import ImageFilter
+from tensorboardX import SummaryWriter
+
 
 
 def main():
@@ -26,6 +28,7 @@ def main():
     parser.add_argument('--epochs', default=30, type=int, metavar='N', help='number of total epochs to run')
     parser.add_argument('--lr', default=None, type=float, metavar='LR', help='initial learning rate, None for debug')
     parser.add_argument('--block_ind', default=11, type=int, help='probe output of this block')
+    parser.add_argument('--deit_model_dir', default='out', type=str, help='directory (within "deit") of deit model')
     parser.add_argument('--deit_model_name', default=None, type=str, help='model name, or None for untrained detr')
     parser.add_argument('--deit_blur', default=0, type=int, help='blur sigma of the model')
     parser.add_argument('--inp_blur', default=0, type=int, help='blur sigma of the inputs for atts training')
@@ -41,7 +44,8 @@ def main():
         # Change name of loaded model, according to its blur:
         if args.deit_blur:
             args.deit_model_name += '_blur{}'.format(args.deit_blur)
-        deit_model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/out', args.deit_model_name)
+        deit_model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit', args.deit_model_dir,
+                                   args.deit_model_name)
 
         # Define name for current atts-model:
         model_name = f'{args.deit_model_name}_block{args.block_ind}'
@@ -69,7 +73,7 @@ def main():
     dataset_path = osp.join(home_dir, 'data/AffectNet/train_set')
     data_dir = osp.join(dataset_path, 'images')
 
-    output_dir = Path(home_dir) / 'code/Transformers/deit/intermediate/out' / model_name
+    output_dir = Path(home_dir) / 'code/Transformers/deit/intermediate/out/new' / model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
     cuda = torch.cuda.is_available()
@@ -139,6 +143,11 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True)
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ For creating Tensorboard log: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    att_dir = "/home/labs/waic/ilanaveh/code/Transformers/deit/intermediate"
+    writer_tb = SummaryWriter(log_dir=osp.join(att_dir, "board/{}_epochs/{}".format(args.epochs, model_name)))
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Get stats for model before training: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     if start_epoch == 1:
         val_acc, val_loss = validate(val_loader, model, criterion)
@@ -168,6 +177,11 @@ def main():
 
         print(f'Epoch 0 (before beginning training): Checkpoint Saved.')
 
+        if writer_tb is not None:
+            print('Writing TB Val, epoch 0')
+            writer_tb.add_scalar('Loss/Val_Loss', log_stats['test_loss'], 0)
+            writer_tb.add_scalar('Accuracy/Val_Acc', log_stats['test_acc'], 0)
+
     for ep in range(start_epoch, args.epochs):
         print('\nepoch', ep)
 
@@ -175,8 +189,18 @@ def main():
         tr_acc, tr_loss = train(train_loader, model, criterion, optimizer, db_flag=(db_suf == '_db'))
         if lr_decay:
             lr_scheduler.step()
+
+        if writer_tb is not None:
+            print('Writing TB Tain, epoch {}'.format(ep))
+            writer_tb.add_scalar('Loss/Train_Loss', tr_loss, ep)
+            writer_tb.add_scalar('Accuracy/Train_Acc', tr_acc, ep)
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         Val:       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         val_acc, val_loss = validate(val_loader, model, criterion, db_flag=(db_suf == '_db'))
+
+        if writer_tb is not None:
+            print('Writing TB Val, epoch {}'.format(ep))
+            writer_tb.add_scalar('Loss/Val_Loss', val_loss, ep)
+            writer_tb.add_scalar('Accuracy/Val_Acc', val_acc, ep)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Check if best: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         is_best = val_acc > best_acc
