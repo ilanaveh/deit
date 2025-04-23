@@ -40,12 +40,13 @@ def get_color_for_model(model_name):
     return 'gray'  # Default color if no match is found
 
 
-def plot_metric(models, metrics):
+def plot_metric(models, metrics, test_blur):
     """
 
     :param models: list of model names (should match the directory names in '/out')
-    :param metric: name of metric to plot / list of four.
-    :param only_one: Whether to plot only one metric, or a grid of four.
+    :param metrics: name of metric to plot / list of four.
+    :param test_blur: either 'max' or 'min' - which test-blur to plot (relevant to var_blur models).
+
     :return:
     """
 
@@ -62,11 +63,13 @@ def plot_metric(models, metrics):
             if os.path.exists(filepath):
                 log_data = read_log_file(filepath)
                 epochs = [entry['epoch'] for entry in log_data]
-                if 'deit_blur0-32' in mdl:
-                    values = [entry[metric.replace('_', '_blur_max_')] for entry in log_data]
+                if ('deit_blur0-32' in mdl) & (test_blur == 'max'):  # if test_blur is 'min', then default is ok.
+                    values = [entry[metric.replace('_', f'_blur_max_')] for entry in log_data]
                 elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl):
+                    blur_min = mdl.split('-')[0].split('blur')[1]
                     blur_max = mdl.split('-')[1].split('_')[0]
-                    values = [entry[metric.replace('_', f'_blur_{blur_max}_')] for entry in log_data]
+                    blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
+                    values = [entry[metric.replace('_', f'_blur_{blur2plt}_')] for entry in log_data]
                 else:
                     values = [entry[metric] for entry in log_data]
                 color = get_color_for_model(mdl)
@@ -84,11 +87,13 @@ def plot_metric(models, metrics):
             if os.path.exists(filepath):
                 log_data = read_log_file(filepath)
                 epochs = [entry['epoch'] for entry in log_data]
-                if 'deit_blur0-32' in mdl:
+                if ('deit_blur0-32' in mdl) & (test_blur == 'max'):  # if test_blur is 'min', then default is ok.
                     values = [entry[metric.replace('_', '_blur_max_')] for entry in log_data]
                 elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl):
+                    blur_min = mdl.split('-')[0].split('blur')[1]
                     blur_max = mdl.split('-')[1].split('_')[0]
-                    values = [entry[metric.replace('_', f'_blur_{blur_max}_')] for entry in log_data]
+                    blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
+                    values = [entry[metric.replace('_', f'_blur_{blur2plt}_')] for entry in log_data]
                 else:
                     values = [entry[metric] for entry in log_data]
                 color = get_color_for_model(mdl)
@@ -163,4 +168,4 @@ if __name__ == "__main__":
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
     # plot_bars(models)
-    plot_metric(models, metric)
+    plot_metric(models, metric, 'min')
