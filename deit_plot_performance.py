@@ -1,5 +1,6 @@
 import json
 import os
+import os.path as osp
 import matplotlib.pyplot as plt
 import torch
 
@@ -15,6 +16,29 @@ def get_epoch_acc(log_data, epoch):
         if epoch_data['epoch'] == epoch:
             return epoch_data['test_acc1']
 
+
+# Dictionary for 'out' folder of each model:
+model_out_dict = {
+    'deit_blur0_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur2_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur4_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur6_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur8_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur32_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-32_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur6_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur8_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur16_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-16_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur16-32_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'original': 'out',
+    'deit_blur4': 'out',
+    'deit_blur8': 'out',
+    'deit_blur16': 'out',
+    'deit_blur32': 'out',
+    'deit_blur0-32_tmp': 'out',
+    'deit_blur4_rep': 'out'
+}
 
 # Create a function to get the appropriate color based on model name
 color_map = {
@@ -58,32 +82,8 @@ def plot_metric(models, metrics, test_blur):
         if len(metrics) > 1:
             plt.subplot(2, 2, i + 1)
 
-        for mdl in models[0]:
-            filepath = os.path.join('out', 'jobs_from_scratch_main_tmp_code', mdl, 'log.txt')
-            if os.path.exists(filepath):
-                log_data = read_log_file(filepath)
-                epochs = [entry['epoch'] for entry in log_data]
-                if ('deit_blur0-32' in mdl) & (test_blur == 'max'):  # if test_blur is 'min', then default is ok.
-                    values = [entry[metric.replace('_', f'_blur_max_')] for entry in log_data]
-                elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl):
-                    blur_min = mdl.split('-')[0].split('blur')[1]
-                    blur_max = mdl.split('-')[1].split('_')[0]
-                    blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
-                    values = [entry[metric.replace('_', f'_blur_{blur2plt}_')] for entry in log_data]
-                else:
-                    values = [entry[metric] for entry in log_data]
-                color = get_color_for_model(mdl)
-                plt.plot(epochs, values, linestyle='-', color=color)
-                blur_level = next((blur for blur in color_map.keys() if blur in mdl), None)
-                if blur_level and blur_level not in legend_added:
-                    plt.plot([], [], color=color, label=blur_level)  # Add empty plot for legend
-                    legend_added.add(blur_level)
-
-            else:
-                print(f"Log file not found in directory: {mdl}")
-
-        for mdl in models[1]:
-            filepath = os.path.join('out', mdl, 'log.txt')
+        for mdl in models:
+            filepath = os.path.join(model_out_dict[mdl], mdl, 'log.txt')
             if os.path.exists(filepath):
                 log_data = read_log_file(filepath)
                 epochs = [entry['epoch'] for entry in log_data]
@@ -102,7 +102,7 @@ def plot_metric(models, metrics, test_blur):
                     blur_level = 'blur0'
                 else:
                     blur_level = next((blur for blur in color_map.keys() if blur in mdl), None)
-                if blur_level and blur_level not in legend_added:
+                if blur_level and (blur_level not in legend_added):
                     plt.plot([], [], color=color, label=blur_level)  # Add empty plot for legend
                     legend_added.add(blur_level)
             else:
@@ -128,8 +128,8 @@ def plot_bars(models):
     best_accs = {mdl: 0 for mdl in models}
 
     for mdl in models:
-        filepath = os.path.join('out', mdl, 'log.txt')
-        best_cp_pth = os.path.join('out', mdl, 'best_checkpoint.pth')
+        filepath = os.path.join(model_out_dict[mdl], mdl, 'log.txt')
+        best_cp_pth = os.path.join(model_out_dict[mdl], mdl, 'best_checkpoint.pth')
         if os.path.exists(filepath):
             log_data = read_log_file(filepath)
             best_cp = torch.load(best_cp_pth)
@@ -155,12 +155,13 @@ if __name__ == "__main__":
     #           'deit_blur0-32_tmp', 'deit_blur0_rep']
     # , 'deit_blur0-32_rep'
 
-    # models is two lists: models[0] - from 'out/jobs_from_scratch_main_tmp_code'; models[1] - from 'out'.
     models = [
-        ['deit_blur0_tmp_new', 'deit_blur2_tmp_new', 'deit_blur4_tmp_new', 'deit_blur6_tmp_new', 'deit_blur8_tmp_new',
-         'deit_blur32_tmp_new', 'deit_blur0-32_tmp_new', 'deit_blur6_rep', 'deit_blur8_rep', 'deit_blur16_tmp_new',
-         'deit_blur0-16_tmp', 'deit_blur16-32_tmp'],
-        ['original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep']]
+        # models saved in 'out/jobs_from_scratch_main_tmp_code':
+        'deit_blur0_tmp_new', 'deit_blur2_tmp_new', 'deit_blur4_tmp_new', 'deit_blur6_tmp_new', 'deit_blur8_tmp_new',
+        'deit_blur32_tmp_new', 'deit_blur0-32_tmp_new', 'deit_blur6_rep', 'deit_blur8_rep', 'deit_blur16_tmp_new',
+        'deit_blur0-16_tmp', 'deit_blur16-32_tmp',
+        # models saved in 'out':
+        'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep']
     # models = [
     #     ['deit_blur0_tmp_new', 'deit_blur4_tmp_new', 'deit_blur8_rep',
     #      'deit_blur32_tmp_new', 'deit_blur0-32_tmp_new', 'deit_blur16_tmp_new'],
