@@ -11,10 +11,23 @@ def read_log_file(filepath):
     return log_data
 
 
-def get_epoch_acc(log_data, epoch):
+def get_epoch_acc(log_data, epoch, mdl, test_blur):
     for epoch_data in log_data:
         if epoch_data['epoch'] == epoch:
-            return epoch_data['test_acc1']
+            if 'deit_blur0-32' in mdl:
+                if test_blur == 'min':
+                    acc1_key = 'test_acc1'
+                else:
+                    acc1_key = 'test_blur_max_acc1'
+            elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl):
+                blur_min = mdl.split('-')[0].split('blur')[1]
+                blur_max = mdl.split('-')[1].split('_')[0]
+                blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
+                acc1_key = f'test_blur_{blur2plt}_acc1'
+            else:
+                acc1_key = 'test_acc1'
+
+            return epoch_data[acc1_key]
 
 
 # Dictionary for 'out' folder of each model:
@@ -118,7 +131,7 @@ def plot_metric(models, metrics, test_blur):
     plt.legend(title='Model')
 
 
-def plot_bars(models):
+def plot_bars(models, test_blur):
     """
     plot accuracy of the best checkpoint of each model (not entire progression during training as in 'plot_metric').
     """
@@ -126,6 +139,7 @@ def plot_bars(models):
     f = plt.figure(figsize=(4.5, 2.6))
 
     best_accs = {mdl: 0 for mdl in models}
+    colors = []
 
     for mdl in models:
         filepath = os.path.join(model_out_dict[mdl], mdl, 'log.txt')
@@ -134,14 +148,12 @@ def plot_bars(models):
             log_data = read_log_file(filepath)
             best_cp = torch.load(best_cp_pth)
             best_epoch = best_cp['epoch']
-            best_accs[mdl] = get_epoch_acc(log_data, best_epoch)
+            best_accs[mdl] = get_epoch_acc(log_data, best_epoch, mdl, test_blur)
+            colors += [get_color_for_model(mdl)]
         else:
             print(f"Log file not found in directory: {mdl}")
 
-    bars = plt.bar(best_accs.keys(), best_accs.values(), zorder=3)
-    for i, bar in enumerate(bars):
-        bar.set_color(plt.rcParams['axes.prop_cycle'].by_key()['color'][
-                          i % len(plt.rcParams['axes.prop_cycle'].by_key()['color'])])
+    bars = plt.bar(best_accs.keys(), best_accs.values(), zorder=3, color=colors)
 
     plt.title('Validation Performance')
     plt.ylabel('Top1 Accuracy')
@@ -168,5 +180,5 @@ if __name__ == "__main__":
     #     []]
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
-    # plot_bars(models)
+    plot_bars(models, test_blur='max')
     plot_metric(models, metric, 'min')
