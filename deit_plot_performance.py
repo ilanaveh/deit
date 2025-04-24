@@ -59,7 +59,7 @@ model_out_dict = {
 color_map = {
     'blur0-32': 'cyan',
     'blur0-16': 'pink',
-    'blur16-32': 'yellow',
+    'blur16-32': 'olive',
     'blur0': 'blue',
     'original': 'blue',
     'blur2': 'green',
@@ -204,7 +204,7 @@ def plot_bars(models, test_blur):
 
     plt.ylim([0, 100])
     plt.grid(axis='y', zorder=0)
-    plt.title('Performance on ' + f'{test_blur}imal'.upper() + ' blur level in range')
+    plt.title('Performance on ' + f'{test_blur}imal'.upper() + ' blur-level in range')
     plt.tight_layout()
     plt.show()
 
