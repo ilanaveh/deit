@@ -3,6 +3,8 @@ import os
 import os.path as osp
 import matplotlib.pyplot as plt
 import torch
+from collections import defaultdict
+import numpy as np
 
 
 def read_log_file(filepath):
@@ -131,15 +133,38 @@ def plot_metric(models, metrics, test_blur):
     plt.legend(title='Model')
 
 
+def get_gen_mdl_name(strings):
+    """Get general model name (format: blurX or blurX-Y), from a list of model names"""
+    if not strings:
+        return ""
+    prefix = os.path.commonprefix(strings)
+    # Get only the 'blurX' part:
+    split_prefix = np.array(prefix.split('_'))
+    blur_ind = ['blur' in x for x in split_prefix]
+    if any(blur_ind):
+        return split_prefix[blur_ind][0]
+    else:
+        # Get the blur from one of the individual models:
+        for string in strings:
+            split_string = np.array(string.split('_'))
+            blur_ind = ['blur' in x for x in split_string]
+            if any(blur_ind):
+                return split_string[blur_ind][0]
+
+    return 'unknown'
+
+
 def plot_bars(models, test_blur):
     """
-    plot accuracy of the best checkpoint of each model (not entire progression during training as in 'plot_metric').
+    Plot accuracy of the best checkpoint.
+    If there was more than one repetition, each bar represents the mean & the error bars - the std.
     """
 
-    f = plt.figure(figsize=(4.5, 2.6))
+    f, ax = plt.subplots(figsize=(5, 3))
 
-    best_accs = {mdl: 0 for mdl in models}
-    colors = []
+    # Step 1: Group accuracies and model names by color
+    color_to_accs = defaultdict(list)
+    color_to_names = defaultdict(list)
 
     for mdl in models:
         filepath = os.path.join(model_out_dict[mdl], mdl, 'log.txt')
@@ -148,17 +173,40 @@ def plot_bars(models, test_blur):
             log_data = read_log_file(filepath)
             best_cp = torch.load(best_cp_pth)
             best_epoch = best_cp['epoch']
-            best_accs[mdl] = get_epoch_acc(log_data, best_epoch, mdl, test_blur)
-            colors += [get_color_for_model(mdl)]
+            acc = get_epoch_acc(log_data, best_epoch, mdl, test_blur)
+            color = get_color_for_model(mdl)
+            color_to_accs[color].append(acc)
+            color_to_names[color].append(mdl)
         else:
             print(f"Log file not found in directory: {mdl}")
 
-    bars = plt.bar(best_accs.keys(), best_accs.values(), zorder=3, color=colors)
+    # Step 2: Prepare data for plotting
+    colors = []
+    means = []
+    stds = []
+    x_labels = []
 
-    plt.title('Validation Performance')
-    plt.ylabel('Top1 Accuracy')
-    plt.grid(axis='y', zorder=0)
+    for color, accs in color_to_accs.items():
+        colors.append(color)
+        means.append(np.mean(accs))
+        stds.append(np.std(accs) if (len(accs) > 1) else np.nan)
+        group_label = get_gen_mdl_name(color_to_names[color])
+        x_labels.append(group_label if group_label else "blur0")  # One of the blur0 models is named 'original', so no common prefix would be found.
+
+    # Step 3: Plot the bars with error bars
+    x = np.arange(len(means))
+    bars = ax.bar(x, means, yerr=stds, color=colors, capsize=5, zorder=3)
+
+    # Add labels:
+    ax.bar_label(bars, labels=[f"{m:.1f}" for m in means], padding=3, fontsize=9)
+    plt.xticks(x, x_labels, rotation=35, ha='right')
+    plt.ylabel("Top-1 Accuracy")
+
     plt.ylim([0, 100])
+    plt.grid(axis='y', zorder=0)
+    plt.title('Performance on ' + f'{test_blur}imal'.upper() + ' blur level in range')
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -167,18 +215,23 @@ if __name__ == "__main__":
     #           'deit_blur0-32_tmp', 'deit_blur0_rep']
     # , 'deit_blur0-32_rep'
 
+    # List of all models except for 'deit_blur8_tmp_new' (saved in 'jobs_from_scratch_main_tmp_code'), since there was
+    # something wrong with its training.
     models = [
         # models saved in 'out/jobs_from_scratch_main_tmp_code':
-        'deit_blur0_tmp_new', 'deit_blur2_tmp_new', 'deit_blur4_tmp_new', 'deit_blur6_tmp_new', 'deit_blur8_tmp_new',
-        'deit_blur32_tmp_new', 'deit_blur0-32_tmp_new', 'deit_blur6_rep', 'deit_blur8_rep', 'deit_blur16_tmp_new',
-        'deit_blur0-16_tmp', 'deit_blur16-32_tmp',
+        'deit_blur0_tmp_new', 'deit_blur2_tmp_new', 'deit_blur4_tmp_new', 'deit_blur6_tmp_new', 'deit_blur6_rep',
+        'deit_blur8_rep', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new', 'deit_blur0-16_tmp', 'deit_blur0-32_tmp_new',
+        'deit_blur16-32_tmp',
         # models saved in 'out':
-        'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep']
+        'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep'
+    ]
+
+
     # models = [
     #     ['deit_blur0_tmp_new', 'deit_blur4_tmp_new', 'deit_blur8_rep',
     #      'deit_blur32_tmp_new', 'deit_blur0-32_tmp_new', 'deit_blur16_tmp_new'],
     #     []]
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
-    plot_bars(models, test_blur='max')
+    plot_bars(models, test_blur='min')
     plot_metric(models, metric, 'min')
