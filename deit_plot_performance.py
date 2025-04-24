@@ -199,12 +199,34 @@ def plot_bars(models, test_blur):
 
     # Add labels:
     ax.bar_label(bars, labels=[f"{m:.1f}" for m in means], padding=3, fontsize=9)
-    plt.xticks(x, x_labels, rotation=35, ha='right')
-    plt.ylabel("Top-1 Accuracy")
+
+    # Add a table at the bottom of the Axes
+    # 1. for 1st row (train blur), remove 'blur' from x_labels:
+    train_blurs_for_tbl = [x.split('blur')[1] for x in x_labels]
+    # 2. for 2nd row (test blur), get minimal/maximal blur in range:
+    test_blurs_for_tbl = []
+    for bl in train_blurs_for_tbl:
+        if '-' in bl:
+            test_blurs_for_tbl.append(bl.split('-')[0] if (test_blur == 'min') else bl.split('-')[1])
+        else:
+            test_blurs_for_tbl.append(bl)
 
     plt.ylim([0, 100])
+    plt.xlim([-.5, 9.5])
+    plt.ylabel("Top-1 Accuracy")
+    plt.xticks([])
     plt.grid(axis='y', zorder=0)
     plt.title('Performance on ' + f'{test_blur}imal'.upper() + ' blur-level in range')
+
+    the_table = plt.table(cellText=[train_blurs_for_tbl, test_blurs_for_tbl],
+                          rowLabels=['Train Blur', 'Test Blur'],
+                          colLabels=['' for x in train_blurs_for_tbl],
+                          loc='bottom',
+                          cellLoc='center')
+
+    # Adjust layout to make room for the table:
+    plt.subplots_adjust(left=0.2, bottom=0.2)
+
     plt.tight_layout()
     plt.show()
 
@@ -224,5 +246,5 @@ if __name__ == "__main__":
 
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
-    plot_bars(models, test_blur='min')
+    plot_bars(models, test_blur='max')
     plot_metric(models, metric, 'min')
