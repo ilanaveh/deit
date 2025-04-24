@@ -19,17 +19,24 @@ def get_epoch_acc(log_data, epoch, mdl, test_blur):
             if 'deit_blur0-32' in mdl:
                 if test_blur == 'min':
                     acc1_key = 'test_acc1'
+                    test_blur_sigma = 0
                 else:
                     acc1_key = 'test_blur_max_acc1'
+                    test_blur_sigma = 32
             elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl):
                 blur_min = mdl.split('-')[0].split('blur')[1]
                 blur_max = mdl.split('-')[1].split('_')[0]
                 blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
                 acc1_key = f'test_blur_{blur2plt}_acc1'
-            else:
-                acc1_key = 'test_acc1'
 
-            return epoch_data[acc1_key]
+                test_blur_sigma = blur2plt
+            else:
+
+                acc1_key = 'test_acc1'
+                # all models have 'blur' in name, except for 'original'
+                test_blur_sigma = mdl.split('blur')[1].split('_')[0] if ('blur' in mdl) else 0
+
+            return epoch_data[acc1_key], test_blur_sigma
 
 
 # Dictionary for 'out' folder of each model:
@@ -165,6 +172,7 @@ def plot_bars(models, test_blur):
     # Step 1: Group accuracies and model names by color
     color_to_accs = defaultdict(list)
     color_to_names = defaultdict(list)
+    color_to_tst_sig = defaultdict(list)
 
     for mdl in models:
         filepath = os.path.join(model_out_dict[mdl], mdl, 'log.txt')
@@ -173,10 +181,11 @@ def plot_bars(models, test_blur):
             log_data = read_log_file(filepath)
             best_cp = torch.load(best_cp_pth)
             best_epoch = best_cp['epoch']
-            acc = get_epoch_acc(log_data, best_epoch, mdl, test_blur)
+            acc, test_bl_sig = get_epoch_acc(log_data, best_epoch, mdl, test_blur)
             color = get_color_for_model(mdl)
             color_to_accs[color].append(acc)
             color_to_names[color].append(mdl)
+            color_to_tst_sig[color] = test_bl_sig
         else:
             print(f"Log file not found in directory: {mdl}")
 
@@ -185,6 +194,7 @@ def plot_bars(models, test_blur):
     means = []
     stds = []
     x_labels = []
+    tst_sigmas = []
 
     for color, accs in color_to_accs.items():
         colors.append(color)
@@ -192,6 +202,7 @@ def plot_bars(models, test_blur):
         stds.append(np.std(accs) if (len(accs) > 1) else np.nan)
         group_label = get_gen_mdl_name(color_to_names[color])
         x_labels.append(group_label if group_label else "blur0")  # One of the blur0 models is named 'original', so no common prefix would be found.
+        tst_sigmas.append(color_to_tst_sig[color])
 
     # Step 3: Plot the bars with error bars
     x = np.arange(len(means))
@@ -203,13 +214,6 @@ def plot_bars(models, test_blur):
     # Add a table at the bottom of the Axes
     # 1. for 1st row (train blur), remove 'blur' from x_labels:
     train_blurs_for_tbl = [x.split('blur')[1] for x in x_labels]
-    # 2. for 2nd row (test blur), get minimal/maximal blur in range:
-    test_blurs_for_tbl = []
-    for bl in train_blurs_for_tbl:
-        if '-' in bl:
-            test_blurs_for_tbl.append(bl.split('-')[0] if (test_blur == 'min') else bl.split('-')[1])
-        else:
-            test_blurs_for_tbl.append(bl)
 
     plt.ylim([0, 100])
     plt.xlim([-.5, 9.5])
@@ -218,7 +222,7 @@ def plot_bars(models, test_blur):
     plt.grid(axis='y', zorder=0)
     plt.title('Performance on ' + f'{test_blur}imal'.upper() + ' blur-level in range')
 
-    the_table = plt.table(cellText=[train_blurs_for_tbl, test_blurs_for_tbl],
+    the_table = plt.table(cellText=[train_blurs_for_tbl, tst_sigmas],
                           rowLabels=['Train Blur', 'Test Blur'],
                           colLabels=['' for x in train_blurs_for_tbl],
                           loc='bottom',
@@ -246,5 +250,5 @@ if __name__ == "__main__":
 
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
-    plot_bars(models, test_blur='max')
+    plot_bars(models, test_blur='min')
     plot_metric(models, metric, 'min')
