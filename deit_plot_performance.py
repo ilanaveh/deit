@@ -210,10 +210,6 @@ def plot_bars(models, test_blur):
 
 
 if __name__ == "__main__":
-    # , 'deit_8gpu', 'deit_blur4', 'deit_blur32'
-    # models = ['original', 'deit_blur4', 'deit_blur4_rep', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32',
-    #           'deit_blur0-32_tmp', 'deit_blur0_rep']
-    # , 'deit_blur0-32_rep'
 
     # List of all models except for 'deit_blur8_tmp_new' (saved in 'jobs_from_scratch_main_tmp_code'), since there was
     # something wrong with its training.
@@ -226,11 +222,6 @@ if __name__ == "__main__":
         'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep'
     ]
 
-
-    # models = [
-    #     ['deit_blur0_tmp_new', 'deit_blur4_tmp_new', 'deit_blur8_rep',
-    #      'deit_blur32_tmp_new', 'deit_blur0-32_tmp_new', 'deit_blur16_tmp_new'],
-    #     []]
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
     plot_bars(models, test_blur='min')
