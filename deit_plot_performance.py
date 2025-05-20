@@ -52,7 +52,11 @@ model_out_dict = {
     'deit_blur8_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'deit_blur16_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'deit_blur0-16_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-16_tmp_fix_bug': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'deit_blur16-32_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-16_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur16-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'original': 'out',
     'deit_blur4': 'out',
     'deit_blur8': 'out',
@@ -65,7 +69,7 @@ model_out_dict = {
 # Create a function to get the appropriate color based on model name
 color_map = {
     'blur0-32': 'cyan',
-    'blur0-16': 'pink',
+    'blur0-16': 'orange',
     'blur16-32': 'olive',
     'blur0': 'blue',
     'original': 'blue',
@@ -73,7 +77,7 @@ color_map = {
     'blur4': 'red',
     'blur6': 'black',
     'blur8': 'purple',
-    'blur16': 'orange',
+    'blur16': 'pink',
     'blur32': 'brown'
 
 }
@@ -111,7 +115,7 @@ def plot_metric(models, metrics, test_blur):
                 epochs = [entry['epoch'] for entry in log_data]
                 if ('deit_blur0-32' in mdl) & (test_blur == 'max'):  # if test_blur is 'min', then default is ok.
                     values = [entry[metric.replace('_', '_blur_max_')] for entry in log_data]
-                elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl):
+                elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl) or ('deit_blur0-32_rep' in mdl):
                     blur_min = mdl.split('-')[0].split('blur')[1]
                     blur_max = mdl.split('-')[1].split('_')[0]
                     blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
@@ -242,13 +246,16 @@ if __name__ == "__main__":
     models = [
         # models saved in 'out/jobs_from_scratch_main_tmp_code':
         'deit_blur0_tmp_new', 'deit_blur2_tmp_new', 'deit_blur4_tmp_new', 'deit_blur6_tmp_new', 'deit_blur6_rep',
-        'deit_blur8_rep', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new', 'deit_blur0-16_tmp', 'deit_blur0-32_tmp_new',
-        'deit_blur16-32_tmp',
+        'deit_blur8_rep', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
+        'deit_blur0-16_tmp_fix_bug',  # this is instead 'deit_blur0-16_tmp' which stopped before training ended (5/5/25)
+        'deit_blur0-32_tmp_new', 'deit_blur16-32_tmp',
+        # Repetitions of the RandBlur jobs:
+        'deit_blur0-16_rep', 'deit_blur0-32_rep', 'deit_blur16-32_rep',
         # models saved in 'out':
         'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep'
     ]
 
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
-    plot_bars(models, test_blur='min')
+    # plot_bars(models, test_blur='min')
     plot_metric(models, metric, 'min')
