@@ -13,6 +13,7 @@ import os.path as osp
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from attention_wrapper import AttentionWithAttnMap
 
 img_pth = '/home/projects/bagon/shared/imagenet'
 img_sub_dir = 'train/n04479046'
@@ -27,6 +28,19 @@ attn_map_mode = 'all'  # 'mean' (mean across attention heads of each layer) / 'a
 model_name = ''
 model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/out/jobs_from_scratch_main_tmp_code/',
                       model_name) if model_name else ''
+
+
+def replace_attention_with_map(model):
+    for i, block in enumerate(model.blocks):
+        orig = block.attn
+        block.attn = AttentionWithAttnMap(
+            dim=orig.qkv.in_features,
+            num_heads=orig.num_heads,
+            qkv_bias=True,
+            attn_drop=orig.attn_drop.p,
+            proj_drop=orig.proj_drop.p,
+        )
+        block.attn.load_state_dict(orig.state_dict())  # preserve pretrained weights
 
 
 def patch_to_index(row, col, grid_size=14):
@@ -51,6 +65,9 @@ model = create_model(
 )
 
 model.eval()
+
+# Replace Attention blocks, with modified blocks that enable access to attention maps:
+replace_attention_with_map(model)
 
 # Turn fused_attn to false, so we get access to attention-maps (relies on adding line 101 to 'attention_wrapper.py')
 for block in model.blocks:
