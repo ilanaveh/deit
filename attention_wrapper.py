@@ -25,6 +25,9 @@ class AttentionWithAttnMap(Attention):
             q = q * self.scale
             attn = q @ k.transpose(-2, -1)
             attn = attn.softmax(dim=-1)
+
+            self.last_attn = attn  # IN: Add this line, to enable access to Attention Map.
+
             attn = self.attn_drop(attn)
             x = attn @ v
 
