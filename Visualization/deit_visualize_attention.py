@@ -20,14 +20,13 @@ img_sub_dir = 'train/n04479046'
 img_name = 'n04479046_15'
 
 save_dir = 'figures'
-save_figs = False
+save_figs = True
 
-layer_indices = np.arange(12)
-attn_map_mode = 'all'  # 'mean' (mean across attention heads of each layer) / 'all'
+layer_indices = [0, 4, 11]  # np.arange(12)
+attn_map_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
 
-model_name = ''
-model_path = osp.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/out/jobs_from_scratch_main_tmp_code/',
-                      model_name) if model_name else ''
+# insert model name, or '' for original (pretrained):
+model_names = ['', '', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new', '']
 
 
 def replace_attention_with_map(model):
@@ -43,89 +42,6 @@ def replace_attention_with_map(model):
         block.attn.load_state_dict(orig.state_dict())  # preserve pretrained weights
 
 
-def patch_to_index(row, col, grid_size=14):
-    return 1 + row * grid_size + col
-
-
-QUERY_TOKEN_INDEX = patch_to_index(3, 5)  # 1 + 7*14 + 7 = center patch
-
-# -------------------------------
-# 1. Load deit model (Based on intermediate/deit_probe_intermediate.py):
-# -------------------------------
-
-# Create deit model with parameters according to those given in main.py:
-model = create_model(
-    'deit_base_patch16_224',
-    pretrained=True,
-    num_classes=1000,
-    drop_rate=0,
-    drop_path_rate=0.1,
-    drop_block_rate=None,
-    img_size=224
-)
-
-model.eval()
-
-# Replace Attention blocks, with modified blocks that enable access to attention maps:
-replace_attention_with_map(model)
-
-# Turn fused_attn to false, so we get access to attention-maps (relies on adding line 101 to 'attention_wrapper.py')
-for block in model.blocks:
-    block.attn.fused_attn = False
-
-# Load trained checkpoint:
-if model_path:
-    deit_checkpoint = torch.load(os.path.join(model_path, 'best_checkpoint.pth'), map_location='cpu')
-    model.load_state_dict(deit_checkpoint['model'])
-
-# -------------------------------
-# 2. Load and preprocess image:
-# -------------------------------
-# Preprocessing
-transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
-
-# Load image
-img_pil = Image.open(osp.join(img_pth, img_sub_dir, img_name + '.JPEG')).convert("RGB")
-input_tensor = transform(img_pil).unsqueeze(0)  # Shape: (1, 3, 224, 224)
-
-# Also keep original image for overlay
-original_image = transforms.Resize(224)(transforms.CenterCrop(224)(img_pil))
-
-# -------------------------------
-# 3. Register forward hooks:
-# -------------------------------
-
-# arrays in which we save the featuremaps
-enc_self_attn_weights = {x: [] for x in layer_indices}  # one list for each layer
-
-# hooks = [
-#     model.blocks[x].attn.attn_drop.register_forward_hook(
-#         lambda self, input, output: enc_self_attn_weights[x].append(output))
-#
-#     for x in layer_indices
-# ]
-
-# -------------------------------
-# 4. Forward Pass
-# -------------------------------
-with torch.no_grad():
-    _ = model(input_tensor)
-
-# for hook in hooks:
-#     hook.remove()
-
-for x in layer_indices:
-    enc_self_attn_weights[x].append(model.blocks[x].attn.last_attn)
-
-
-# -------------------------------
-# 5. Visualize Attention Overlay
-# -------------------------------
 def visualize_all_heads_by_block(attn_maps, token_index, layer_indices, marker="rectangle", grid_size=14, mode="mean",
                                  save_figs=0):
     """
@@ -140,8 +56,9 @@ def visualize_all_heads_by_block(attn_maps, token_index, layer_indices, marker="
     :return:
     """
 
-    save_full_pth = osp.join(save_dir, img_name, model_name) if model_name else osp.join(save_dir, img_name, 'original')
+    save_full_pth = osp.join(save_dir, img_name, mdl) if mdl else osp.join(save_dir, img_name, 'original')
     if save_figs and not osp.isdir(save_full_pth):
+        print(f"Creating new Directory: {save_full_pth}")
         os.mkdir(save_full_pth)
 
     patch_size = 224 // grid_size
@@ -230,19 +147,108 @@ def visualize_all_heads_by_block(attn_maps, token_index, layer_indices, marker="
         if save_figs:
             if not osp.isfile(osp.join(save_full_pth, fig_ttl + '.png')):
                 fig.savefig(osp.join(save_full_pth, fig_ttl + '.png'))
+            else:
+                print(f"Figure of layer {i} from model {mdl} already exists => not saving.")
         else:
             plt.show()
 
 
-# -------------------------------
-# Run the Overlay Visualization
-# -------------------------------
-#
-attn_maps = [enc_self_attn_weights[x][0] for x in layer_indices]
+def patch_to_index(row, col, grid_size=14):
+    return 1 + row * grid_size + col
 
-# Visualize
-visualize_all_heads_by_block(attn_maps, token_index=QUERY_TOKEN_INDEX, layer_indices=layer_indices, marker="rectangle",
-                             save_figs=save_figs, mode=attn_map_mode)
-# visualize_attention_overlay(enc_self_attn_weights[0], QUERY_TOKEN_INDEX)
+
+QUERY_TOKEN_INDEX = patch_to_index(3, 5)  # 1 + 7*14 + 7 = center patch
+
+if not model_names:
+    model_names = ['']  # empty model name => use original (pretrained) model.
+
+for mdl in model_names:
+    model_path = osp.join(
+        '/home/projects/bagon/ilanaveh/code/Transformers/deit/out/jobs_from_scratch_main_tmp_code/', mdl) \
+        if mdl else ''
+    # -------------------------------
+    # 1. Load deit model (Based on intermediate/deit_probe_intermediate.py):
+    # -------------------------------
+
+    # Create deit model with parameters according to those given in main.py:
+    model = create_model(
+        'deit_base_patch16_224',
+        pretrained=True,
+        num_classes=1000,
+        drop_rate=0,
+        drop_path_rate=0.1,
+        drop_block_rate=None,
+        img_size=224
+    )
+
+    model.eval()
+
+    # Replace Attention blocks, with modified blocks that enable access to attention maps:
+    replace_attention_with_map(model)
+
+    # Turn fused_attn to false, so we get access to attention-maps (relies on adding line 101 to 'attention_wrapper.py')
+    for block in model.blocks:
+        block.attn.fused_attn = False
+
+    # Load trained checkpoint:
+    if model_path:
+        deit_checkpoint = torch.load(os.path.join(model_path, 'best_checkpoint.pth'), map_location='cpu')
+        model.load_state_dict(deit_checkpoint['model'])
+
+    # -------------------------------
+    # 2. Load and preprocess image:
+    # -------------------------------
+    # Preprocessing
+    transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    # Load image
+    img_pil = Image.open(osp.join(img_pth, img_sub_dir, img_name + '.JPEG')).convert("RGB")
+    input_tensor = transform(img_pil).unsqueeze(0)  # Shape: (1, 3, 224, 224)
+
+    # Also keep original image for overlay
+    original_image = transforms.Resize(224)(transforms.CenterCrop(224)(img_pil))
+
+    # -------------------------------
+    # 3. Register forward hooks:
+    # -------------------------------
+
+    # arrays in which we save the featuremaps
+    enc_self_attn_weights = {x: [] for x in layer_indices}  # one list for each layer
+
+    # hooks = [
+    #     model.blocks[x].attn.attn_drop.register_forward_hook(
+    #         lambda self, input, output: enc_self_attn_weights[x].append(output))
+    #
+    #     for x in layer_indices
+    # ]
+
+    # -------------------------------
+    # 4. Forward Pass
+    # -------------------------------
+    with torch.no_grad():
+        _ = model(input_tensor)
+
+    # for hook in hooks:
+    #     hook.remove()
+
+    for x in layer_indices:
+        enc_self_attn_weights[x].append(model.blocks[x].attn.last_attn)
+
+
+    # -------------------------------
+    # 5. Visualize Attention Overlay
+    # -------------------------------
+
+    attn_maps = [enc_self_attn_weights[x][0] for x in layer_indices]
+
+    # Visualize
+    visualize_all_heads_by_block(attn_maps, token_index=QUERY_TOKEN_INDEX, layer_indices=layer_indices, marker="rectangle",
+                                 save_figs=save_figs, mode=attn_map_mode)
+    # visualize_attention_overlay(enc_self_attn_weights[0], QUERY_TOKEN_INDEX)
 
 print('done')
