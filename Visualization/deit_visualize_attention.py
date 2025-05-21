@@ -5,6 +5,7 @@ Based on Andrey's code:
 andreyg\Projects\Variable_Resolution_DETR\Programming\detr_var\EXPERIMENTS\attention_visualizer\sequence_runner_attn_vis
 (also saved it here (in 'Andrey' dir).
 """
+import matplotlib
 from timm.models import create_model
 from torchvision import transforms
 from PIL import Image, ImageFilter
@@ -13,6 +14,7 @@ import os.path as osp
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from attention_wrapper import AttentionWithAttnMap
 
 img_pth = '/home/projects/bagon/shared/imagenet'
@@ -22,14 +24,16 @@ img_name = 'n04479046_15'
 save_dir = 'figures'
 save_figs = True
 
-layer_indices = [0, 4, 11]  # np.arange(12)
+layer_indices = [0, 4, 5, 11]  # np.arange(12)
 attn_map_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
 
 # Insert model name, or '' for original (pretrained):
-model_names = ['', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new', '']
+model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
+               'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new']
 
 # Insert blur sigma:
 blur = 16
+show_im_with_blur = False
 
 
 class GaussianBlur(object):
@@ -96,6 +100,7 @@ def visualize_all_heads_by_block(attn_maps, token_index, layer_indices, marker="
         if not osp.isdir(osp.join(save_dir, img_name, f'Blur{blur}')):
             print(f"Creating new Directory: {osp.join(save_dir, img_name, f'Blur{blur}')}")
             os.mkdir(osp.join(save_dir, img_name, f'Blur{blur}'))
+
         if not osp.isdir(save_full_pth):
             print(f"Creating new Directory: {save_full_pth}")
             os.mkdir(save_full_pth)
@@ -112,9 +117,15 @@ def visualize_all_heads_by_block(attn_maps, token_index, layer_indices, marker="
             token_attn = (token_attn - token_attn.min()) / (token_attn.max() - token_attn.min())
             attn_resized = np.kron(token_attn, np.ones((patch_size, patch_size)))
 
+            # Map to RGBA with variable alpha (s.t. low attention values would be transparent)
+            cmap = matplotlib.colormaps['jet']
+            colors = cmap(attn_resized)
+            max_alpha = 0.6
+            colors[..., 3] = attn_resized * max_alpha
+
             fig, ax = plt.subplots(figsize=(6, 6))
             ax.imshow(original_image)
-            ax.imshow(attn_resized, cmap='jet', alpha=0.4)
+            ax.imshow(colors)
 
             if token_index != 0 and marker != "none":
                 patch_row, patch_col = divmod(token_index - 1, grid_size)
@@ -184,12 +195,15 @@ def visualize_all_heads_by_block(attn_maps, token_index, layer_indices, marker="
             raise ValueError(f"Unsupported mode: {mode}. Choose 'all' or 'mean'.")
 
         if save_figs:
-            if not osp.isfile(osp.join(save_full_pth, fig_ttl + '.png')):
-                fig.savefig(osp.join(save_full_pth, fig_ttl + '.png'))
+            fig_ttl_full = fig_ttl+' - blurred' if (show_im_with_blur and blur) else fig_ttl
+            if not osp.isfile(osp.join(save_full_pth, fig_ttl_full + '.png')):
+                fig.savefig(osp.join(save_full_pth, fig_ttl_full + '.png'))
             else:
                 print(f"Figure of layer {i} from model {mdl} already exists => not saving.")
         else:
             plt.show()
+
+        plt.close()
 
 
 def patch_to_index(row, col, grid_size=14):
@@ -256,7 +270,10 @@ for mdl in model_names:
     input_tensor = transform(img_pil).unsqueeze(0)  # Shape: (1, 3, 224, 224)
 
     # Also keep original image for overlay
-    original_image = transforms.Resize(224)(transforms.CenterCrop(224)(img_pil))
+    if show_im_with_blur and blur:
+        original_image = transforms.Resize(224)(transforms.CenterCrop(224)(GaussianBlur(blur)(img_pil)))
+    else:
+        original_image = transforms.Resize(224)(transforms.CenterCrop(224)(img_pil))
 
     # -------------------------------
     # 3. Register forward hooks:
