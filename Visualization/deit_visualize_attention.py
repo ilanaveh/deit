@@ -7,7 +7,7 @@ andreyg\Projects\Variable_Resolution_DETR\Programming\detr_var\EXPERIMENTS\atten
 """
 from timm.models import create_model
 from torchvision import transforms
-from PIL import Image
+from PIL import Image, ImageFilter
 import os
 import os.path as osp
 import torch
@@ -25,8 +25,38 @@ save_figs = True
 layer_indices = [0, 4, 11]  # np.arange(12)
 attn_map_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
 
-# insert model name, or '' for original (pretrained):
-model_names = ['', '', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new', '']
+# Insert model name, or '' for original (pretrained):
+model_names = ['', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new', '']
+
+# Insert blur sigma:
+blur = 16
+
+
+class GaussianBlur(object):
+    """Apply Gaussian blur filter with the given sigma to the input PIL Image.
+    Args:
+        sigma (int): Desired Gaussian blur level sigma
+
+    Taken from: W:\dannyh\work\code\PyTorch\vggface2_lookdir\datasets\custom_transforms.
+   """
+
+    def __init__(self, sigma):
+        assert isinstance(sigma, int)
+        self.sigma = sigma
+
+    def __call__(self, img):
+        """
+        Args:
+            img (PIL Image): Image to be scaled.
+        Returns:
+            PIL Image: Rescaled image.
+        """
+        img = img.filter(ImageFilter.GaussianBlur(radius=self.sigma))
+
+        return img
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(sigma={0})'.format(self.sigma)
 
 
 def replace_attention_with_map(model):
@@ -56,10 +86,19 @@ def visualize_all_heads_by_block(attn_maps, token_index, layer_indices, marker="
     :return:
     """
 
-    save_full_pth = osp.join(save_dir, img_name, mdl) if mdl else osp.join(save_dir, img_name, 'original')
-    if save_figs and not osp.isdir(save_full_pth):
-        print(f"Creating new Directory: {save_full_pth}")
-        os.mkdir(save_full_pth)
+    save_full_pth = osp.join(save_dir, img_name, f'Blur{blur}', mdl) if mdl else \
+        osp.join(save_dir, img_name, f'Blur{blur}', 'original')
+    if save_figs:
+        if not osp.isdir(osp.join(save_dir, img_name)):
+            print(f"Creating new Directory: {osp.join(save_dir, img_name)}")
+            os.mkdir(osp.join(save_dir, img_name))
+
+        if not osp.isdir(osp.join(save_dir, img_name, f'Blur{blur}')):
+            print(f"Creating new Directory: {osp.join(save_dir, img_name, f'Blur{blur}')}")
+            os.mkdir(osp.join(save_dir, img_name, f'Blur{blur}'))
+        if not osp.isdir(save_full_pth):
+            print(f"Creating new Directory: {save_full_pth}")
+            os.mkdir(save_full_pth)
 
     patch_size = 224 // grid_size
 
@@ -199,12 +238,18 @@ for mdl in model_names:
     # 2. Load and preprocess image:
     # -------------------------------
     # Preprocessing
-    transform = transforms.Compose([
+
+    transform_list = [
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    ]
+
+    if blur:
+        transforms_list = [GaussianBlur(blur)] + transform_list
+
+    transform = transforms.Compose(transforms_list)
 
     # Load image
     img_pil = Image.open(osp.join(img_pth, img_sub_dir, img_name + '.JPEG')).convert("RGB")
@@ -238,7 +283,6 @@ for mdl in model_names:
 
     for x in layer_indices:
         enc_self_attn_weights[x].append(model.blocks[x].attn.last_attn)
-
 
     # -------------------------------
     # 5. Visualize Attention Overlay
