@@ -158,27 +158,11 @@ for mdl in model_names:
         original_image = transforms.Resize(224)(transforms.CenterCrop(224)(img_pil))
 
     # -------------------------------
-    # 3. Register forward hooks:
+    # 3. Forward Pass
     # -------------------------------
 
-    # arrays in which we save the featuremaps
-    enc_self_attn_weights = {x: [] for x in layer_indices}  # one list for each layer
-
-    # hooks = [
-    #     model.blocks[x].attn.attn_drop.register_forward_hook(
-    #         lambda self, input, output: enc_self_attn_weights[x].append(output))
-    #
-    #     for x in layer_indices
-    # ]
-
-    # -------------------------------
-    # 4. Forward Pass
-    # -------------------------------
     with torch.no_grad():
         _ = model(input_tensor)
-
-    # for hook in hooks:
-    #     hook.remove()
 
     for x in layer_indices:
         all_models_attn[x][mdl or 'original'] = model.blocks[x].attn.last_attn
