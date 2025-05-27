@@ -24,11 +24,12 @@ img_name = 'n04479046_15'
 
 save_dir = 'figures'
 save_figs = True
+save_original = True  # whether to save original image (after transforms, but without overlayed attention map)
 
 layer_indices = [4]  # np.arange(12)
 attn_map_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
-patch_coord = [5, 5]  # [3, 5] - left eye. [5, 5] - mouth
-cmp_mode = 'models'  # 'models' (fig for each layer, compare models) / 'layers' (fig for each model, compare layers)
+patch_coord = []  # [] - CLS token, [3, 5] - left eye. [5, 5] - mouth. [5, 8] / [6, 9] - jacket collar. [] - jacket
+cmp_mode = 'layers'  # 'models' (fig for each layer, compare models) / 'layers' (fig for each model, compare layers)
 if cmp_mode == 'layers':
     layer_indices = np.arange(12)
 
@@ -37,7 +38,7 @@ model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp
                'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new']
 
 # Insert blur sigma:
-blur = 8  # Input blur
+blur = 16  # Input blur
 show_im_with_blur = False  # whether to visualize images with chosen input blur (if False - visualize high-res).
 
 
@@ -219,7 +220,9 @@ def visualize_all_heads_by_block(attn_maps, token_index, layer_indices, marker="
 
 
 def patch_to_index(coord_list, grid_size=14):
-    return 1 + coord_list[0] * grid_size + coord_list[1]
+    if coord_list:
+        return 1 + coord_list[0] * grid_size + coord_list[1]
+    return 0  # for [CLS] token
 
 
 # -------------------- MAIN PROCESS --------------------
@@ -370,8 +373,25 @@ if cmp_mode == 'models':
                 else f"Compare Models - {fig_ttl}.png"
             out_path = osp.join(save_dir, img_name, save_nm)
             plt.savefig(out_path)
+
+            # Save copy of original image (after Transforms, but without attention map):
+            if save_original:
+                # Create figure:
+                fig_ori = plt.figure()
+                ax = plt.gca()
+                ax.imshow(original_image)
+                ax.axis('off')
+                plt.tight_layout()
+
+                # Save figure:
+                save_ori_nm = f"{img_name}_clean - Blurred.png" if (show_im_with_blur and blur) else f"{img_name}_clean"
+                out_path_ori = osp.join(save_dir, img_name, save_ori_nm)
+                plt.savefig(out_path_ori)
+
         else:
             plt.show()
+
+        plt.close()
 
 elif cmp_mode == 'layers':
     for mdl in model_names:
@@ -423,9 +443,24 @@ elif cmp_mode == 'layers':
                 else f"{fig_ttl} - All Layers.png"
             out_path = osp.join(save_dir, img_name, save_nm)
             plt.savefig(out_path)
+
+            # Save copy of original image (after Transforms, but without attention map):
+            if save_original:
+                # Create figure:
+                fig_ori = plt.figure()
+                ax = plt.gca()
+                ax.imshow(original_image)
+                ax.axis('off')
+                plt.tight_layout()
+
+                # Save figure:
+                save_ori_nm = f"{img_name}_clean - Blurred.png" if (show_im_with_blur and blur) else f"{img_name}_clean"
+                out_path_ori = osp.join(save_dir, img_name, save_ori_nm)
+                plt.savefig(out_path_ori)
+
         else:
             plt.show()
 
-plt.close()
+        plt.close()
 
 print('done')
