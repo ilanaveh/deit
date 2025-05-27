@@ -24,10 +24,16 @@ img_name = 'n04479046_15'
 
 save_dir = 'figures'
 save_figs = True
-save_original = True  # whether to save original image (after transforms, but without overlayed attention map)
+save_original = False  # whether to save original image (after transforms, but without overlayed attention map)
+
+# Insert blur sigma:
+blur = 0  # Input blur
+show_im_with_blur = True  # whether to visualize images with chosen input blur (if False - visualize high-res).
 
 layer_indices = [4]  # np.arange(12)
-attn_map_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
+head_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
+lyr_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
+
 patch_coord = []  # [] - CLS token, [3, 5] - left eye. [5, 5] - mouth. [5, 8] / [6, 9] - jacket collar. [] - jacket
 cmp_mode = 'layers'  # 'models' (fig for each layer, compare models) / 'layers' (fig for each model, compare layers)
 if cmp_mode == 'layers':
@@ -36,11 +42,6 @@ if cmp_mode == 'layers':
 # Insert model name, or '' for original (pretrained):
 model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
                'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new']
-
-# Insert blur sigma:
-blur = 16  # Input blur
-show_im_with_blur = False  # whether to visualize images with chosen input blur (if False - visualize high-res).
-
 
 # -------------------- UTILITIES --------------------
 class GaussianBlur(object):
@@ -87,6 +88,33 @@ def patch_to_index(coord_list, grid_size=14):
     if coord_list:
         return 1 + coord_list[0] * grid_size + coord_list[1]
     return 0  # for [CLS] token
+
+
+def get_attn_map(attn_tensor, head_mode):
+    """
+
+    :param attn_tensor: shape: [heads, tokens, tokens] (either for specific layer, or mean across layers)
+    :param head_mode: 'mean' / 'all'
+    :return:
+    """
+    # Get token attention map
+    if head_mode == "mean":
+        token_attn = attn_tensor[:, QUERY_TOKEN_INDEX, 1:].mean(0)
+    else:
+        token_attn = attn_tensor[0, QUERY_TOKEN_INDEX, 1:]  # just head 0
+
+    token_attn = token_attn.reshape(14, 14).detach().cpu().numpy()
+    token_attn = np.clip(token_attn, 0, None)
+    token_attn = (token_attn - token_attn.min()) / (token_attn.max() - token_attn.min())
+    attn_resized = np.kron(token_attn, np.ones((16, 16)))  # upsample to 224x224
+
+    # Map to RGBA with variable alpha (s.t. low attention values would be transparent)
+    cmap = matplotlib.colormaps['jet']
+    colors = cmap(attn_resized)
+    max_alpha = 0.6
+    colors[..., 3] = attn_resized * max_alpha
+
+    return colors
 
 
 # -------------------- MAIN PROCESS --------------------
@@ -172,29 +200,14 @@ if cmp_mode == 'models':
     for layer in layer_indices:
         fig, axs = plt.subplots(2, 4, figsize=(9, 4.5))
         axs = axs.flatten()
-        # axs[4]._visible = False
+
         for i, mdl in enumerate(model_names):
             name = mdl or 'original'
             attn = all_models_attn[layer][name][0]  # shape: (heads, tokens, tokens)
 
-            # Get token attention map
-            if attn_map_mode == "mean":
-                token_attn = attn[:, QUERY_TOKEN_INDEX, 1:].mean(0)
-            else:
-                token_attn = attn[0, QUERY_TOKEN_INDEX, 1:]  # just head 0
+            colors = get_attn_map(attn, head_mode)  # Get token attention map
 
-            token_attn = token_attn.reshape(14, 14).detach().cpu().numpy()
-            token_attn = np.clip(token_attn, 0, None)
-            token_attn = (token_attn - token_attn.min()) / (token_attn.max() - token_attn.min())
-            attn_resized = np.kron(token_attn, np.ones((16, 16)))  # upsample to 224x224
-
-            # Map to RGBA with variable alpha (s.t. low attention values would be transparent)
-            cmap = matplotlib.colormaps['jet']
-            colors = cmap(attn_resized)
-            max_alpha = 0.6
-            colors[..., 3] = attn_resized * max_alpha
-
-            ax = axs[i] if i < 4 else axs[i+1]
+            ax = axs[i] if i < 4 else axs[i + 1]
 
             ax.imshow(original_image)
             ax.imshow(colors)
@@ -243,31 +256,20 @@ if cmp_mode == 'models':
 
 elif cmp_mode == 'layers':
     for mdl in model_names:
-        fig, axs = plt.subplots(3, 4, figsize=(12, 9))
-        axs = axs.flatten()
         name = mdl or 'original'
 
-        for i, layer in enumerate(layer_indices):
-            attn = all_models_attn[layer][name][0]  # shape: (heads, tokens, tokens)
+        if lyr_mode == 'mean':
+            fig = plt.figure()
+            ax = plt.gca()
 
-            # Get token attention map
-            if attn_map_mode == "mean":
-                token_attn = attn[:, QUERY_TOKEN_INDEX, 1:].mean(0)
-            else:
-                token_attn = attn[0, QUERY_TOKEN_INDEX, 1:]  # just head 0
+            # Get new tensor, which holds Attention-Maps of all layers along its first dimension
+            # (shape: [layers, heads, tokens, tokens])
+            attn_all_lyrs = torch.cat([all_models_attn[lyr][name][0].unsqueeze(0) for lyr in layer_indices], dim=0)
 
-            token_attn = token_attn.reshape(14, 14).detach().cpu().numpy()
-            token_attn = np.clip(token_attn, 0, None)
-            token_attn = (token_attn - token_attn.min()) / (token_attn.max() - token_attn.min())
-            attn_resized = np.kron(token_attn, np.ones((16, 16)))  # upsample to 224x224
+            # Then, get the mean across layers:
+            attn_mean_lyrs = attn_all_lyrs.mean(0)
 
-            # Map to RGBA with variable alpha (s.t. low attention values would be transparent)
-            cmap = matplotlib.colormaps['jet']
-            colors = cmap(attn_resized)
-            max_alpha = 0.6
-            colors[..., 3] = attn_resized * max_alpha
-
-            ax = axs[i]
+            colors = get_attn_map(attn_mean_lyrs, head_mode)  # get attention map (mean across layers)
 
             ax.imshow(original_image)
             ax.imshow(colors)
@@ -279,16 +281,41 @@ elif cmp_mode == 'layers':
                 rect = plt.Rectangle((x, y), 16, 16, edgecolor='white', facecolor='none', linewidth=2)
                 ax.add_patch(rect)
 
-            ax.set_title(f"Layer {layer}", fontsize=10)
+            fig_ttl = f"Model '{name}' - Token {QUERY_TOKEN_INDEX} - Input Blur {blur} - Mean Across Layers"
+            ax.set_title(fig_ttl, fontsize=10)
             ax.axis('off')
 
-        axs[4].axis('off')
-        fig_ttl = f"Model '{name}' - Token {QUERY_TOKEN_INDEX} - Input Blur {blur}"
-        plt.suptitle(fig_ttl, fontsize=14)
+        elif lyr_mode == 'all':
+            fig, axs = plt.subplots(3, 4, figsize=(12, 9))
+            axs = axs.flatten()
+
+            for i, layer in enumerate(layer_indices):
+                attn = all_models_attn[layer][name][0]  # ([0] is just for extracting tensor, there are no other indices)
+                # attn shape: (heads, tokens, tokens)
+
+                colors = get_attn_map(attn, head_mode)
+
+                ax = axs[i]
+
+                ax.imshow(original_image)
+                ax.imshow(colors)
+
+                if QUERY_TOKEN_INDEX != 0:
+                    patch_row, patch_col = divmod(QUERY_TOKEN_INDEX - 1, 14)
+                    x = patch_col * 16
+                    y = patch_row * 16
+                    rect = plt.Rectangle((x, y), 16, 16, edgecolor='white', facecolor='none', linewidth=2)
+                    ax.add_patch(rect)
+
+                ax.set_title(f"Layer {layer}", fontsize=10)
+                ax.axis('off')
+
+            axs[4].axis('off')
+            fig_ttl = f"Model '{name}' - Token {QUERY_TOKEN_INDEX} - Input Blur {blur} - All Layers"
+            plt.suptitle(fig_ttl, fontsize=14)
 
         if save_figs:
-            save_nm = f"{fig_ttl} - All Layers - Blurred.png" if (show_im_with_blur and blur) \
-                else f"{fig_ttl} - All Layers.png"
+            save_nm = f"{fig_ttl} - Blurred.png" if (show_im_with_blur and blur) else f"{fig_ttl}.png"
             out_path = osp.join(save_dir, img_name, save_nm)
             plt.savefig(out_path)
 
