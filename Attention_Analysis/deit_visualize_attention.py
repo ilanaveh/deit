@@ -7,8 +7,6 @@ andreyg\Projects\Variable_Resolution_DETR\Programming\detr_var\EXPERIMENTS\atten
 """
 import matplotlib
 from timm.models import create_model
-from torchvision import transforms
-from PIL import Image, ImageFilter
 import json
 import os
 import os.path as osp
@@ -16,7 +14,7 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from helper_functions import get_model_with_attn
+from helper_functions import get_model_with_attn, load_and_preprocess_img
 from collections import defaultdict
 
 # -------------------- CONFIG --------------------
@@ -52,31 +50,6 @@ model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp
 
 
 # -------------------- UTILITIES --------------------
-class GaussianBlur(object):
-    """Apply Gaussian blur filter with the given sigma to the input PIL Image.
-    Args:
-        sigma (int): Desired Gaussian blur level sigma
-
-    Taken from: W:\dannyh\work\code\PyTorch\vggface2_lookdir\datasets\custom_transforms.
-   """
-
-    def __init__(self, sigma):
-        assert isinstance(sigma, int)
-        self.sigma = sigma
-
-    def __call__(self, img):
-        """
-        Args:
-            img (PIL Image): Image to be scaled.
-        Returns:
-            PIL Image: Rescaled image.
-        """
-        img = img.filter(ImageFilter.GaussianBlur(radius=self.sigma))
-
-        return img
-
-    def __repr__(self):
-        return self.__class__.__name__ + '(sigma={0})'.format(self.sigma)
 
 
 def patch_to_index(coord_list, grid_size=14):
@@ -92,7 +65,7 @@ def get_attn_map(attn_tensor, head_mode):
     :param head_mode: 'mean' / 'all'
     :return:
     """
-    # Get token attention map
+    # Get token attention map (start from index 1, since 0 is [CLS] token)
     if head_mode == "mean":
         token_attn = attn_tensor[:, QUERY_TOKEN_INDEX, 1:].mean(0)
     else:
@@ -127,60 +100,15 @@ for mdl in model_names:
         '/home/projects/bagon/ilanaveh/code/Transformers/deit/out/jobs_from_scratch_main_tmp_code/', mdl) \
         if mdl else ''
     # -------------------------------
-    # 1. Load deit model (Based on intermediate/deit_probe_intermediate.py):
+    # 1. Load deit model:
     # -------------------------------
-
-    # Create deit model with parameters according to those given in main.py:
-    model = create_model(
-        'deit_base_patch16_224',
-        pretrained=True,
-        num_classes=1000,
-        drop_rate=0,
-        drop_path_rate=0.1,
-        drop_block_rate=None,
-        img_size=224
-    )
-
-    model.eval()
-
-    # Replace Attention blocks, with modified blocks that enable access to attention maps:
-    replace_attention_with_map(model)
-
-    # Turn fused_attn to false, so we get access to attention-maps (relies on adding line 101 to 'attention_wrapper.py')
-    for block in model.blocks:
-        block.attn.fused_attn = False
-
-    # Load trained checkpoint:
-    if model_path:
-        deit_checkpoint = torch.load(os.path.join(model_path, 'best_checkpoint.pth'), map_location='cpu')
-        model.load_state_dict(deit_checkpoint['model'])
+    model = get_model_with_attn(model_path)
 
     # -------------------------------
     # 2. Load and preprocess image:
     # -------------------------------
-    # Preprocessing
-
-    transforms_list = [
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ]
-
-    if blur:
-        transforms_list = [GaussianBlur(blur)] + transforms_list
-
-    transform = transforms.Compose(transforms_list)
-
-    # Load image
-    img_pil = Image.open(osp.join(img_pth, img_sub_dir, img_name + '.JPEG')).convert("RGB")
-    input_tensor = transform(img_pil).unsqueeze(0)  # Shape: (1, 3, 224, 224)
-
-    # Also keep original image for overlay
-    if show_im_with_blur and blur:
-        original_image = transforms.Resize(224)(transforms.CenterCrop(224)(GaussianBlur(blur)(img_pil)))
-    else:
-        original_image = transforms.Resize(224)(transforms.CenterCrop(224)(img_pil))
+    img_full_pth = osp.join(img_pth, img_sub_dir, img_name + '.JPEG')
+    original_image, input_tensor = load_and_preprocess_img(img_full_pth, blur, show_im_with_blur)
 
     # -------------------------------
     # 3. Forward Pass
