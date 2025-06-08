@@ -15,23 +15,35 @@ from helper_functions import load_and_preprocess_img, get_model_with_attn
 import torch
 import matplotlib.pyplot as plt
 import pickle
+import json
 
 
 save_file = True  # whether to save all_models_distances dictionary.
+save_fig = True
+
 layer_indices = np.arange(12)
 model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
                'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new']
 blur = 0  # input blur
 n_patches = 14  # property of deit
 
+# Get Imagenet info:
+with open('imagenet1000_clsidx_to_labels.txt', 'r') as file:
+    imagenet_idx_to_lbl = json.load(file)
+
+with open(osp.join('..', 'out_from_save_class_to_idx', 'class_to_idx.txt'), 'r') as file:
+    imagenet_class_to_idx = json.load(file)
+
 # Go over all images in 'trenchcoat' category in validation set:
 img_pth = '/home/projects/bagon/shared/imagenet'
 img_dataset = 'val'
-img_cat = 'n04479046'
-img_cat = 'n01443537'
+img_cat = 'n09472597'
+# img_cat = 'n01532829'
+
+img_lbl = imagenet_idx_to_lbl[f"{imagenet_class_to_idx[img_cat]}"]
 # img_name = 'n04479046_15'
 
-filename = osp.join(f'../Attention_Analysis/all_models_distances_{img_cat}.pkl')
+filename = osp.join(f'../Attention_Analysis/from_attention_distances/all_models_distances_{img_cat}_{img_lbl}.pkl')
 
 if osp.isfile(filename):
     with open(filename, "rb") as file:
@@ -115,11 +127,15 @@ else:
 for model in model_names:
     means = [np.mean(all_models_distances[layer][model]) for layer in layer_indices]
     stds = [np.std(all_models_distances[layer][model]) for layer in layer_indices]
-    plt.errorbar(layer_indices, means, yerr=stds, label=model.split('_tmp')[0], marker='o', linestyle='-')
+    plt.errorbar(layer_indices, means, yerr=stds, label=(model.split('_tmp')[0] or 'original'), marker='o', linestyle='-')
 
 plt.xticks(layer_indices)
 plt.xlabel('Layer')
 plt.ylabel('Mean Attention Distance')
+plt.title(f"{img_cat} ({img_lbl})")
 plt.legend()
+
+if save_fig:
+    plt.savefig(filename.replace('pkl', 'png'))
 
 print('done')
