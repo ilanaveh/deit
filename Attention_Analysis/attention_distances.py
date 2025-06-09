@@ -20,13 +20,14 @@ import json
 
 save_file = True  # whether to save all_models_distances dictionary.
 save_fig = True
-start_from_saved_data = False
+start_from_saved_data_when_possible = True
 
 layer_indices = np.arange(12)
 model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
                'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new']
 blur = 0  # input blur
 n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
+patch_size = 16
 
 # Get Imagenet info:
 with open('imagenet1000_clsidx_to_labels.txt', 'r') as file:
@@ -38,17 +39,18 @@ with open(osp.join('..', 'out_from_save_class_to_idx', 'class_to_idx.txt'), 'r')
 # Go over all images in 'trenchcoat' category in validation set:
 img_pth = '/home/projects/bagon/shared/imagenet'
 img_dataset = 'val'
-img_cat = 'n09472597'
-# img_cat = 'n01532829'
+# img_cat = 'n09472597'  # volcano
+# img_cat = 'n01532829'  # house finch
+img_cat = 'n04479046'  # trenchcoat
 
 img_lbl = imagenet_idx_to_lbl[f"{imagenet_class_to_idx[img_cat]}"]
 # img_name = 'n04479046_15'
 
 filename = osp.join(f'../Attention_Analysis/from_attention_distances/all_models_distances_{img_cat}_{img_lbl}.pkl')
 if not osp.isfile(filename):
-    start_from_saved_data = False
+    start_from_saved_data_when_possible = False
 
-if start_from_saved_data:
+if start_from_saved_data_when_possible:
     with open(filename, "rb") as file:
         all_models_distances = pickle.load(file)
 else:
@@ -88,10 +90,10 @@ else:
 
             for lyr in layer_indices:
                 # get attention for each layer, mean over heads:
-                lyr_attn = np.squeeze(model.blocks[lyr].attn.last_attn).mean(0)
+                lyr_attn = np.squeeze(model.blocks[lyr].attn.last_attn).mean(0)  # [ntokens=197, ntokens=197]
 
                 # Remove [CLS] token (which isn't relevant for distances:
-                lyr_attn_no_CLS = lyr_attn[1:, 1:]
+                lyr_attn_no_CLS = lyr_attn[1:, 1:]  # [ntokens=196, ntokens=196]
 
                 # Insert to dictionary:
                 all_models_attn[lyr][mdl or 'original'] = lyr_attn_no_CLS
@@ -104,18 +106,27 @@ else:
                 query_points_counted = 0
 
                 for token_idx in range(lyr_attn_no_CLS.shape[0]):  # 0-195 (0 is not [CLS] token, since it was removed)
-                    patch_attn_grid = lyr_attn_no_CLS[token_idx, :].reshape(n_patches, n_patches).detach().cpu().numpy()
+                    token_attn = lyr_attn_no_CLS[token_idx, :]
+
+                    # Renormalize (normalization was lost, since we removed [CLS] token):
+                    token_attn = token_attn / token_attn.sum()
+                    assert np.round(token_attn.sum(), 3) == 1
+
+                    # Get attention grid of token. Shape: [14, 14]
+                    token_attn_grid = token_attn.reshape(n_patches, n_patches).detach().cpu().numpy()
 
                     patch_x, patch_y = divmod(token_idx, n_patches)
                     grid_x, grid_y = torch.meshgrid(torch.arange(n_patches), torch.arange(n_patches), indexing='ij')
                     distances = torch.sqrt((grid_x - patch_x) ** 2 +
                                            (grid_y - patch_y) ** 2)
 
+                    distances = distances * patch_size
+
                     # Scale distances by the pixel values in the map
-                    scaled_distances = distances * patch_attn_grid
+                    scaled_distances = distances * token_attn_grid
 
                     # Sum the scaled distances and add to total
-                    total_scaled_distances += scaled_distances.mean()
+                    total_scaled_distances += scaled_distances.sum()  # mean over tokens (use sum since we had softmax)
                     query_points_counted += 1
 
                 # Compute the average scaled distance
