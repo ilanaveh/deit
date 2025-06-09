@@ -20,12 +20,13 @@ import json
 
 save_file = True  # whether to save all_models_distances dictionary.
 save_fig = True
+start_from_saved_data = False
 
 layer_indices = np.arange(12)
 model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
                'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new']
 blur = 0  # input blur
-n_patches = 14  # property of deit
+n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
 
 # Get Imagenet info:
 with open('imagenet1000_clsidx_to_labels.txt', 'r') as file:
@@ -44,8 +45,10 @@ img_lbl = imagenet_idx_to_lbl[f"{imagenet_class_to_idx[img_cat]}"]
 # img_name = 'n04479046_15'
 
 filename = osp.join(f'../Attention_Analysis/from_attention_distances/all_models_distances_{img_cat}_{img_lbl}.pkl')
+if not osp.isfile(filename):
+    start_from_saved_data = False
 
-if osp.isfile(filename):
+if start_from_saved_data:
     with open(filename, "rb") as file:
         all_models_distances = pickle.load(file)
 else:
