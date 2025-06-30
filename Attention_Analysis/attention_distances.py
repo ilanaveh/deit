@@ -18,16 +18,83 @@ import pickle
 import json
 
 
-save_file = True  # whether to save all_models_distances dictionary.
-save_fig = True
+save_file = False  # whether to save all_models_distances dictionary.
+save_fig = False
 start_from_saved_data_when_possible = True
+sep_panels = True  # whether to show each model in its own subplot.
 
 layer_indices = np.arange(12)
-model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
-               'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new']
+# model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
+#                'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new',
+#                '']
+
+model_names = [
+        # models saved in 'out/jobs_from_scratch_main_tmp_code':
+        'deit_blur0_tmp_new', 'deit_blur2_tmp_new', 'deit_blur4_tmp_new', 'deit_blur6_tmp_new', 'deit_blur6_rep',
+        'deit_blur8_rep', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
+        'deit_blur0-16_tmp_fix_bug',  # this is instead 'deit_blur0-16_tmp' which stopped before training ended (5/5/25)
+        'deit_blur0-32_tmp_new', 'deit_blur16-32_tmp',
+        # Repetitions of the RandBlur jobs:
+        'deit_blur0-16_rep', 'deit_blur16-32_rep',
+        # models saved in 'out':
+        'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep'
+    ]
 blur = 0  # input blur
 n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
 patch_size = 16
+
+
+# Dictionary for 'out' folder of each model:
+model_out_dict = {
+    'deit_blur0_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur2_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur4_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur6_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur8_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur32_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-32_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur6_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur8_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur16_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-16_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-16_tmp_fix_bug': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur16-32_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-16_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur16-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'original': 'out',
+    'deit_blur4': 'out',
+    'deit_blur8': 'out',
+    'deit_blur16': 'out',
+    'deit_blur32': 'out',
+    'deit_blur0-32_tmp': 'out',
+    'deit_blur4_rep': 'out'
+}
+
+
+# Create a function to get the appropriate color based on model name (from deit_plot_performance.py)
+color_map = {
+    'blur0-32': 'cyan',
+    'blur0-16': 'orange',
+    'blur16-32': 'olive',
+    'blur0': 'blue',
+    'original': 'blue',
+    'blur2': 'green',
+    'blur4': 'red',
+    'blur6': 'black',
+    'blur8': 'purple',
+    'blur16': 'pink',
+    'blur32': 'brown'
+
+}
+
+
+def get_color_for_model(model_name):
+    for blur_level in color_map.keys():
+        if blur_level in model_name:
+            return color_map[blur_level]
+    return 'gray'  # Default color if no match is found
+
 
 # Get Imagenet info:
 with open('imagenet1000_clsidx_to_labels.txt', 'r') as file:
@@ -41,14 +108,25 @@ img_pth = '/home/projects/bagon/shared/imagenet'
 img_dataset = 'val'
 # img_cat = 'n09472597'  # volcano
 # img_cat = 'n01532829'  # house finch
-img_cat = 'n04479046'  # trenchcoat
+# img_cat = 'n04479046'  # trenchcoat
+img_cat = 'n07697313'  # cheeseburger
 
 img_lbl = imagenet_idx_to_lbl[f"{imagenet_class_to_idx[img_cat]}"]
 # img_name = 'n04479046_15'
 
-filename = osp.join(f'../Attention_Analysis/from_attention_distances/all_models_distances_{img_cat}_{img_lbl}.pkl')
+filename = osp.join(f'../Attention_Analysis/from_attention_distances/'
+                    f'all_models_distances_{img_cat}_{img_lbl}_{len(model_names)}models.pkl')
 if not osp.isfile(filename):
-    start_from_saved_data_when_possible = False
+    if osp.isfile(filename.replace(f'_{len(model_names)}models', '')):  # old version, without # of models
+        # Check if all models are in dictionary:
+        with open(filename, "rb") as file:
+            all_models_distances = pickle.load(file)
+
+    else:
+        start_from_saved_data_when_possible = False
+else:
+    with open(filename, "rb") as file:
+        all_models_distances = pickle.load(file)
 
 if start_from_saved_data_when_possible:
     with open(filename, "rb") as file:
@@ -64,7 +142,7 @@ else:
         print(mdl)
 
         model_path = osp.join(
-            '/home/projects/bagon/ilanaveh/code/Transformers/deit/out/jobs_from_scratch_main_tmp_code/', mdl) \
+            '/home/projects/bagon/ilanaveh/code/Transformers/deit/', model_out_dict[mdl], mdl) \
             if mdl else ''
         # -------------------------------
         # 1. Load deit model:
@@ -138,16 +216,76 @@ else:
             pickle.dump(all_models_distances, file)
 
 # plot:
-for model in model_names:
-    means = [np.mean(all_models_distances[layer][model]) for layer in layer_indices]
-    stds = [np.std(all_models_distances[layer][model]) for layer in layer_indices]
-    plt.errorbar(layer_indices, means, yerr=stds, label=(model.split('_tmp')[0] or 'original'), marker='o', linestyle='-')
 
-plt.xticks(layer_indices)
-plt.xlabel('Layer')
-plt.ylabel('Mean Attention Distance')
-plt.title(f"{img_cat} ({img_lbl})")
-plt.legend()
+if sep_panels:
+    fig, subplots = plt.subplots(2, 5)  # assuming 10 blur levels, change if needed
+    subplots = subplots.flatten()
+    # first, get list of blur-levels:
+    blur_level_inds = dict()
+    i = 0
+    for mdl in model_names:
+        if 'original' in mdl:
+            blur_level = 'blur0'
+        else:
+            blur_level = next((blur for blur in color_map.keys() if blur in mdl), None)
+        if blur_level and (blur_level not in blur_level_inds.keys()):
+            blur_level_inds[blur_level] = i
+            i += 1
+
+    # Plot each model's attention distances:
+    for mdl in model_names:
+        means = [np.mean(all_models_distances[layer][mdl]) for layer in layer_indices]
+        stds = [np.std(all_models_distances[layer][mdl]) for layer in layer_indices]
+
+        # Get subplot index:
+        if 'original' in mdl:
+            blur_level = 'blur0'
+        else:
+            blur_level = next((blur for blur in color_map.keys() if blur in mdl), None)
+
+        mdl_i = blur_level_inds[blur_level]
+        ax = subplots[mdl_i]
+
+        ax.errorbar(layer_indices, means, yerr=stds, marker='o', linestyle='-')
+
+    # Set axis properties:
+    for blur_level, ax_i in blur_level_inds.items():
+        ax = subplots[ax_i]
+        ax.set_ylim([40, 130])
+        ax.set_title(blur_level)
+        if (ax_i != 0) & (ax_i != 5):
+            ax.set_yticklabels([])
+        if ax_i >= 5:
+            ax.set_xticks(np.arange(0, len(layer_indices), 2))
+        else:
+            ax.set_xticks([])
+        ax.grid(axis='y')
+
+    plt.tight_layout()
+
+else:
+    # Initialize a set to keep track of which blur levels have been added to the legend
+    legend_added = set()
+    for mdl in model_names:
+        means = [np.mean(all_models_distances[layer][mdl]) for layer in layer_indices]
+        stds = [np.std(all_models_distances[layer][mdl]) for layer in layer_indices]
+        color = get_color_for_model(mdl)
+        if 'original' in mdl:
+            blur_level = 'blur0'
+        else:
+            blur_level = next((blur for blur in color_map.keys() if blur in mdl), None)
+        if blur_level and (blur_level not in legend_added):
+            plt.plot([], [], color=color, label=blur_level)  # Add empty plot for legend
+            legend_added.add(blur_level)
+
+        plt.errorbar(layer_indices, means, yerr=stds,
+                     marker='o', linestyle='-', color=color)
+
+    plt.xticks(layer_indices)
+    plt.xlabel('Layer')
+    plt.ylabel('Mean Attention Distance (px)')
+    plt.title(f"{img_cat} ({img_lbl})")
+    plt.legend()
 
 if save_fig:
     plt.savefig(filename.replace('pkl', 'png'))
