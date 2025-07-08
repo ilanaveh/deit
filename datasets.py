@@ -57,6 +57,43 @@ class INatDataset(ImageFolder):
     # __getitem__ and __len__ inherited from ImageFolder
 
 
+class AffectnetDataset(ImageFolder):
+    def __init__(self, root, transform=None, target_transform=None, des_classes=[], balance_clss=False):
+        self.des_classes = des_classes  # desired classes (list of integeres, between 0-10)
+
+        # Number of images in each AffectNet category (in train_set):
+        self.count_class_dict = {0: 74874, 1: 134415, 2: 25459, 3: 14090, 4: 6378, 5: 3803, 6: 24882, 7: 3750, 8: 33088,
+                                 9: 82415, 10: 419799}
+        self.balance_clss = balance_clss  # whether to balance number of images from each class.
+
+        super().__init__(root, loader=default_loader, transform=transform, target_transform=target_transform)
+
+
+    def make_dataset(self, directory, class_to_idx=None, extensions=None, is_valid_file=None):
+        """
+        Override the make_dataset method, since Affectnet is not organized in sub-folders corresponding to classes.
+        Original method (used by ImageFolder): /usr/local/lib/python3.10/dist-packages/torchvision/datasets/folder.py
+        """
+        # Copy the first part from original make_dataset method:
+        directory = os.path.expanduser(directory)
+        images_path = os.path.join(directory, 'images')
+        ann_path = os.path.join(directory, 'annotations')
+
+        # Initialize list of image paths and labels
+        images = []
+
+        # Walk through images and annotations
+        for (i, img) in enumerate(os.listdir(images_path)):
+            im_id = img.split('.')[0]  # remove '.jpg'
+            if img.lower().endswith(extensions):
+                ann = int(np.load(os.path.join(ann_path, (im_id + '_exp.npy'))))
+                if ann in self.des_classes:
+                    path = os.path.join(directory, img)
+                    images.append((path, ann))
+
+        return images
+
+
 def build_dataset(is_train, args):
     transform = build_transform(is_train, args)
 
@@ -75,6 +112,12 @@ def build_dataset(is_train, args):
         dataset = INatDataset(args.data_path, train=is_train, year=2019,
                               category=args.inat_category, transform=transform)
         nb_classes = dataset.nb_classes
+
+    elif args.data_set == "Affectnet":
+        root = os.path.join(args.data_path, 'train_set' if is_train else 'val_set')
+
+        nb_classes = len(args.desired_classes)
+        dataset = AffectnetDataset(root, transform=transform, des_classes=args.desired_classes)
 
     return dataset, nb_classes
 
