@@ -88,7 +88,7 @@ class AffectnetDataset(ImageFolder):
             if img.lower().endswith(extensions):
                 ann = int(np.load(os.path.join(ann_path, (im_id + '_exp.npy'))))
                 if ann in self.des_classes:
-                    path = os.path.join(directory, img)
+                    path = os.path.join(images_path, img)
                     images.append((path, ann))
 
         return images
