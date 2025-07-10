@@ -10,6 +10,9 @@ Changes:
     * also removed 'fabric' - ToDo: need to understand if I need it.
     * Also removed 'enable_deepspeed'.
 """
+import sys
+sys.path.append("/home/projects/bagon/ilanaveh/code/Transformers")
+
 import argparse
 import os
 import torch
@@ -233,6 +236,7 @@ def main(args):
 
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
+    print(f"Creating dataset: {args.data_set}")
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
@@ -323,6 +327,8 @@ def main(args):
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total: {total_params:,} | Trainable: {trainable_params:,}")
+
+    model.to(device)
 
     total_batch_size = args.batch_size * utils.get_world_size()
     num_training_steps_per_epoch = len(dataset_train) // total_batch_size
