@@ -5,6 +5,8 @@ Train and eval functions used in main.py
 """
 import math
 import sys
+sys.path.append("/home/projects/bagon/ilanaveh/code/Transformers/deit")  # for importing losses
+
 from typing import Iterable, Optional
 
 import torch
