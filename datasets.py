@@ -58,16 +58,19 @@ class INatDataset(ImageFolder):
 
 
 class AffectnetDataset(ImageFolder):
-    def __init__(self, root, transform=None, target_transform=None, des_classes=[], balance_clss=False):
+    def __init__(self, root, transform=None, target_transform=None, des_classes=[], balance_clss=False, debug=False):
         self.des_classes = des_classes  # desired classes (list of integeres, between 0-10)
 
         # Number of images in each AffectNet category (in train_set):
         self.count_class_dict = {0: 74874, 1: 134415, 2: 25459, 3: 14090, 4: 6378, 5: 3803, 6: 24882, 7: 3750, 8: 33088,
                                  9: 82415, 10: 419799}
         self.balance_clss = balance_clss  # whether to balance number of images from each class.
+        self.class_to_idx = {c: i for (i, c) in enumerate(des_classes)}
+
+        # if debugging, build small dataset:
+        self.limit_dataset_size = 10 if debug else None
 
         super().__init__(root, loader=default_loader, transform=transform, target_transform=target_transform)
-
 
     def make_dataset(self, directory, class_to_idx=None, extensions=None, is_valid_file=None):
         """
@@ -83,7 +86,9 @@ class AffectnetDataset(ImageFolder):
         if self.balance_clss:
             cnt_ims_lst = [self.count_class_dict[c] for c in self.des_classes]
             des_ims_each_clss = np.min(cnt_ims_lst)
-            # Initialize dictionary for keeping track of how many images from each class:
+
+        # Initialize dictionary for keeping track of how many images from each class:
+        if self.balance_clss or self.limit_dataset_size:
             track_num_ims_each_clss = {c: 0 for c in self.des_classes}
 
         # Initialize list of image paths and labels
@@ -97,10 +102,11 @@ class AffectnetDataset(ImageFolder):
                 if ann in self.des_classes:
                     if (not self.balance_clss) or (track_num_ims_each_clss[ann] < des_ims_each_clss):
                         path = os.path.join(images_path, img)
-                        images.append((path, ann))
-                        if self.balance_clss:
+                        images.append((path, self.class_to_idx[ann]))
+                        if self.balance_clss or self.limit_dataset_size:
+                            target_num = self.limit_dataset_size if self.limit_dataset_size else des_ims_each_clss
                             track_num_ims_each_clss[ann] += 1
-                            if np.all([v == des_ims_each_clss for v in track_num_ims_each_clss.values()]):
+                            if np.all([v >= target_num for v in track_num_ims_each_clss.values()]):
                                 break
 
         return images
@@ -129,7 +135,8 @@ def build_dataset(is_train, args):
         root = os.path.join(args.data_path, 'train_set' if is_train else 'val_set')
 
         nb_classes = len(args.desired_classes)
-        dataset = AffectnetDataset(root, transform=transform, des_classes=args.desired_classes)
+        dataset = AffectnetDataset(root, transform=transform, des_classes=args.desired_classes,
+                                   balance_clss=args.balance_clss, debug=args.debug)
 
     return dataset, nb_classes
 
