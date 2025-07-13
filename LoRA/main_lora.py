@@ -42,6 +42,8 @@ def get_args_parser():
     parser.add_argument('--bce-loss', action='store_true')
     parser.add_argument('--unscale-lr', action='store_true')
 
+    parser.add_argument('--debug', default=False, type=bool, help='build small dataset if debugging.')
+
     # Model parameters
     parser.add_argument('--model', default='deit_base_patch16_224', type=str, metavar='MODEL',
                         help='Name of model to train')
@@ -172,6 +174,8 @@ def get_args_parser():
     parser.add_argument('--desired_classes', default=[1, 6], type=list,
                         help='0: Neutral, 1: Happiness, 2: Sadness, 3: Surprise, 4: Fear, 5: Disgust, 6: Anger, '
                              '7: Contempt, 8: None, 9: Uncertain, 10: No-Face.ToDo: decide which classes I want.')
+    parser.add_argument('--balance_clss', default=True, type=bool,
+                        help='whether to take the same number of images from each class (relevant for Affectnet)')
     parser.add_argument('--inat-category', default='name',
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
                         type=str, help='semantic granularity')
@@ -220,6 +224,7 @@ def get_args_parser():
 def main(args):
     utils.init_distributed_mode(args)
     device = torch.device(args.device)
+    args.debug = torch.cuda.device_count() == 1
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
@@ -287,6 +292,8 @@ def main(args):
         img_size=args.input_size
     )
 
+    model.to(device)  # need this for model_ema (so it would be on cuda). Later, add again to move lora layers to cuda.
+
     model_ema = None
     if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
@@ -328,7 +335,7 @@ def main(args):
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total: {total_params:,} | Trainable: {trainable_params:,}")
 
-    model.to(device)
+    model.to(device)  # add second time, for moving lora params to cuda.
 
     total_batch_size = args.batch_size * utils.get_world_size()
     num_training_steps_per_epoch = len(dataset_train) // total_batch_size
