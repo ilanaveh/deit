@@ -79,6 +79,13 @@ class AffectnetDataset(ImageFolder):
         images_path = os.path.join(directory, 'images')
         ann_path = os.path.join(directory, 'annotations')
 
+        # If balance classes, get number of images required for each class:
+        if self.balance_clss:
+            cnt_ims_lst = [self.count_class_dict[c] for c in self.des_classes]
+            des_ims_each_clss = np.min(cnt_ims_lst)
+            # Initialize dictionary for keeping track of how many images from each class:
+            track_num_ims_each_clss = {c: 0 for c in self.des_classes}
+
         # Initialize list of image paths and labels
         images = []
 
@@ -88,8 +95,13 @@ class AffectnetDataset(ImageFolder):
             if img.lower().endswith(extensions):
                 ann = int(np.load(os.path.join(ann_path, (im_id + '_exp.npy'))))
                 if ann in self.des_classes:
-                    path = os.path.join(images_path, img)
-                    images.append((path, ann))
+                    if (not self.balance_clss) or (track_num_ims_each_clss[ann] < des_ims_each_clss):
+                        path = os.path.join(images_path, img)
+                        images.append((path, ann))
+                        if self.balance_clss:
+                            track_num_ims_each_clss[ann] += 1
+                            if np.all([v == des_ims_each_clss for v in track_num_ims_each_clss.values()]):
+                                break
 
         return images
 
