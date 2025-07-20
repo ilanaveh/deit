@@ -414,7 +414,22 @@ def main(args):
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     max_accuracy = 0.0
-    for epoch in range(args.start_epoch, args.epochs):
+
+    if args.start_epoch == 0:
+        # Get test accuracy before training starts:
+        test_stats = evaluate(data_loader_val, model, device)
+        print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with blur "
+              f"{args.blur}: {test_stats['acc1']:.1f}%")
+        args.start_epoch = 1
+
+        max_accuracy = test_stats["acc1"]
+
+        if writer_tb is not None:
+            print('Writing TB Val, epoch 0')
+            writer_tb.add_scalar('Loss/Val_Loss', test_stats['loss'], 0)
+            writer_tb.add_scalar('Accuracy/Val_Acc', test_stats['acc1'], 0)
+
+    for epoch in range(args.start_epoch, args.epochs + 1):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
 
@@ -454,7 +469,7 @@ def main(args):
                     }, checkpoint_path)
 
         test_stats = evaluate(data_loader_val, model, device)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images with blur "
+        print(f"Epoch {epoch} - Accuracy of the network on the {len(dataset_val)} test images with blur "
               f"{args.blur}: {test_stats['acc1']:.1f}%")
 
         current_acc = test_stats["acc1"]
@@ -505,7 +520,7 @@ def main(args):
 
             print('Writing TB Val, epoch {}'.format(epoch))
             writer_tb.add_scalar('Loss/Val_Loss', test_stats['loss'], epoch)
-            writer_tb.add_scalar('Accuracy/Val_Acc', test_stats['loss'], epoch)
+            writer_tb.add_scalar('Accuracy/Val_Acc', test_stats['acc1'], epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
