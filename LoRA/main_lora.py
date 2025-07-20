@@ -33,12 +33,13 @@ import time
 from deit.engine import train_one_epoch, evaluate
 import json
 import datetime
+from tensorboardX import SummaryWriter
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
     parser.add_argument('--batch-size', default=64, type=int)
-    parser.add_argument('--epochs', default=300, type=int)
+    parser.add_argument('--epochs', default=30, type=int)  # Change to 30, as in Liel's code.
     parser.add_argument('--bce-loss', action='store_true')
     parser.add_argument('--unscale-lr', action='store_true')
 
@@ -94,16 +95,17 @@ def get_args_parser():
     parser.add_argument('--min-lr', type=float, default=1e-5, metavar='LR',
                         help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
 
-    parser.add_argument('--decay-epochs', type=float, default=30, metavar='N',
-                        help='epoch interval to decay LR')
-    parser.add_argument('--warmup-epochs', type=int, default=5, metavar='N',
-                        help='epochs to warmup LR, if scheduler supports')
-    parser.add_argument('--cooldown-epochs', type=int, default=10, metavar='N',
-                        help='epochs to cooldown LR at min_lr, after cyclic schedule ends')
-    parser.add_argument('--patience-epochs', type=int, default=10, metavar='N',
-                        help='patience epochs for Plateau LR scheduler (default: 10')
-    parser.add_argument('--decay-rate', '--dr', type=float, default=0.1, metavar='RATE',
-                        help='LR decay rate (default: 0.1)')
+    # Removed arguments related to LR decay (they don't exist in Liel's code)
+    # parser.add_argument('--decay-epochs', type=float, default=30, metavar='N',
+    #                     help='epoch interval to decay LR')
+    # parser.add_argument('--warmup-epochs', type=int, default=5, metavar='N',
+    #                     help='epochs to warmup LR, if scheduler supports')
+    # parser.add_argument('--cooldown-epochs', type=int, default=10, metavar='N',
+    #                     help='epochs to cooldown LR at min_lr, after cyclic schedule ends')
+    # parser.add_argument('--patience-epochs', type=int, default=10, metavar='N',
+    #                     help='patience epochs for Plateau LR scheduler (default: 10')
+    # parser.add_argument('--decay-rate', '--dr', type=float, default=0.1, metavar='RATE',
+    #                     help='LR decay rate (default: 0.1)')
 
     # Augmentation parameters
     parser.add_argument('--color-jitter', type=float, default=0.3, metavar='PCT',
@@ -224,7 +226,7 @@ def get_args_parser():
 def main(args):
     utils.init_distributed_mode(args)
     device = torch.device(args.device)
-    # args.debug = torch.cuda.device_count() == 1
+    args.debug = torch.cuda.device_count() == 1
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
@@ -272,6 +274,17 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=False
     )
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ For creating Tensorboard log: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    if utils.is_main_process():
+        tb_dir = args.output_dir.replace('out', 'board')
+        print(f'Creating Tensorboard directory: {tb_dir}')
+        writer_tb = SummaryWriter(log_dir=os.path.join(tb_dir, "{}_epochs/{}".format(args.epochs, args.model_name)))
+    else:
+        writer_tb = None
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -349,7 +362,9 @@ def main(args):
     args.weight_decay = 0.00
     args.warmup_epochs = 0
     print("LR = %.8f" % args.lr)
+    print(f"Total batch size = {total_batch_size} (batchsize = {args.batch_size}, num workers = {utils.get_world_size()})")
     print("Number of training examples = %d" % len(dataset_train))
+    print("Number of training steps per epoch = %d" % num_training_steps_per_epoch)
 
     skip_weight_decay_list = model.no_weight_decay()
     print("Skip weight decay list: ", skip_weight_decay_list)
@@ -425,6 +440,7 @@ def main(args):
         )
 
         lr_scheduler.step(epoch)
+
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             for checkpoint_path in checkpoint_paths:
@@ -487,8 +503,20 @@ def main(args):
                      'n_parameters': n_parameters}
 
         if args.output_dir and utils.is_main_process():
+            print(f"Saving epoch {epoch} stats to log file at: {output_dir}")
             with (output_dir / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
+        else:
+            print("Not saving log.")
+
+        if writer_tb is not None:
+            print('Writing TB Tain, epoch {}'.format(epoch))
+            writer_tb.add_scalar('Loss/Train_Loss', train_stats['loss'], epoch)
+            writer_tb.add_scalar('Accuracy/Train_Acc', train_stats['acc1'], epoch)
+
+            print('Writing TB Val, epoch {}'.format(epoch))
+            writer_tb.add_scalar('Loss/Val_Loss', test_stats['loss'], epoch)
+            writer_tb.add_scalar('Accuracy/Val_Acc', test_stats['loss'], epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
