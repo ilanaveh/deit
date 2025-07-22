@@ -40,7 +40,7 @@ blur = 0  # input blur
 n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
 patch_size = 16
 
-attn_heads_to_show = [3, 4, 10, 11]
+attn_layers_to_show = [3, 4, 10, 11]  # List of indices between 0-11. In git plot: [3, 4, 10, 11].
 
 lyr_color_dict = {1: 'orange',
                   2: 'olive',
@@ -153,7 +153,7 @@ def main():
 
     # plot:
     fig = plt.figure()
-    for lyr in attn_heads_to_show:
+    for lyr in attn_layers_to_show:
         color = lyr_color_dict[lyr]
         lyr_dists = all_distances[lyr]
         all_heads_mean_dist = [np.mean(lyr_dists[h]) for h in head_indices]
