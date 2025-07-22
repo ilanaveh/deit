@@ -7,6 +7,7 @@ Location of Timm's original Attention class: /usr/local/lib/python3.10/dist-pack
 from timm.models.vision_transformer import Attention
 import torch
 import torch.nn.functional as F
+import copy
 
 
 class AttentionWithAttnMap(Attention):
@@ -26,7 +27,7 @@ class AttentionWithAttnMap(Attention):
             attn = q @ k.transpose(-2, -1)
             attn = attn.softmax(dim=-1)
 
-            self.last_attn = attn  # IN: Add this line, to enable access to Attention Map.
+            self.last_attn = copy.deepcopy(attn)  # IN: Add this line, to enable access to Attention Map.
 
             attn = self.attn_drop(attn)
             x = attn @ v
