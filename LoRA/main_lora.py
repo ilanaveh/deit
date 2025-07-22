@@ -39,7 +39,7 @@ from tensorboardX import SummaryWriter
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
     parser.add_argument('--batch-size', default=64, type=int)
-    parser.add_argument('--epochs', default=30, type=int)  # Change to 30, as in Liel's code.
+    parser.add_argument('--epochs', default=100, type=int)  # Change to 30, as in Liel's code.
     parser.add_argument('--bce-loss', action='store_true')
     parser.add_argument('--unscale-lr', action='store_true')
 
