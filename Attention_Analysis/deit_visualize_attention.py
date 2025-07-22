@@ -39,7 +39,7 @@ layer_indices = [4]  # np.arange(12)
 head_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
 lyr_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
 
-patch_coord = []  # [] - CLS token, [3, 5] - left eye. [5, 5] - mouth. [5, 8] / [6, 9] - jacket collar. [] - jacket
+patch_coord = [3, 5]  # [] - CLS token, [3, 5] - left eye. [5, 5] - mouth. [5, 8] / [6, 9] - jacket collar. [] - jacket
 cmp_mode = 'layers'  # 'models' (fig for each layer, compare models) / 'layers' (fig for each model, compare layers)
 if cmp_mode == 'layers':
     layer_indices = np.arange(12)
