@@ -250,7 +250,7 @@ if __name__ == "__main__":
         'deit_blur0-16_tmp_fix_bug',  # this is instead 'deit_blur0-16_tmp' which stopped before training ended (5/5/25)
         'deit_blur0-32_tmp_new', 'deit_blur16-32_tmp',
         # Repetitions of the RandBlur jobs:
-        'deit_blur0-16_rep', 'deit_blur0-32_rep', 'deit_blur16-32_rep',
+        'deit_blur0-16_rep', 'deit_blur16-32_rep',
         # models saved in 'out':
         'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep'
     ]
