@@ -19,20 +19,6 @@ averaging over heads).
 import timm
 import torch
 
-# model = timm.create_model('vit_base_patch16_224.orig_in21k', pretrained=True)
-# model.eval()
-# model = get_model_with_attn(model_path)
-
-"""
-3/6/25
-Compute Attention distances for each token (the average spatial distance to all other tokens, weighted by the attention
-maps).
-Based on Andrey's CVPR paper ("Seeing more with less: human-like representations in vision models")
-and code: andreyg\Projects\Variable_Resolution_DETR\Programming\detr_var\EXPERIMENTS\attention_map_graph_generator\
-            objects\graph_plotter.py
-
-Currently, distances for all tokens are averaged, as opposed to Andrey who separated between center and periphery.
-"""
 import numpy as np
 import os
 import os.path as osp
@@ -48,13 +34,23 @@ save_fig = False
 layer_indices = np.arange(12)
 head_indices = np.arange(12)
 model_names = ['original']
+sort_heads = True
 
 blur = 0  # input blur
 n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
 patch_size = 16
 
-lyr_color_dict = {0: 'blue',
-                  1: 'green',
+attn_heads_to_show = [3, 4, 10, 11]
+
+lyr_color_dict = {1: 'orange',
+                  2: 'olive',
+                  3: 'blue',
+                  4: 'green',
+                  5: 'black',
+                  6: 'purple',
+                  7: 'brown',
+                  8: 'pink',
+                  9: 'grey',
                   10: 'red',
                   11: 'cyan'}
 
@@ -78,6 +74,7 @@ img_lbl = imagenet_idx_to_lbl[f"{imagenet_class_to_idx[img_cat]}"]
 
 fig_name = osp.join(f'../Attention_Analysis/from_attention_distances/'
                     f'all_models_distances_{img_cat}_{img_lbl}_{len(model_names)}models.png')
+fig_name = fig_name.replace('.png', '_sorted.png') if sort_heads else fig_name
 
 
 def main():
@@ -156,9 +153,12 @@ def main():
 
     # plot:
     fig = plt.figure()
-    for lyr, color in lyr_color_dict.items():
+    for lyr in attn_heads_to_show:
+        color = lyr_color_dict[lyr]
         lyr_dists = all_distances[lyr]
         all_heads_mean_dist = [np.mean(lyr_dists[h]) for h in head_indices]
+        if sort_heads:
+            all_heads_mean_dist.sort()
         plt.plot(head_indices, all_heads_mean_dist, marker='o', linestyle='-', color=color, label=f"block_{lyr}")
 
     plt.xticks(head_indices)
