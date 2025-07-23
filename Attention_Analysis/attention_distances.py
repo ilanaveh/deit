@@ -92,7 +92,7 @@ def main():
         # models saved in 'out':
         'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep'
     ]
-    blur = 0  # input blur
+    inp_blur = 0  # input blur
     n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
     patch_size = 16
 
@@ -117,7 +117,7 @@ def main():
     filename = osp.join(f'../Attention_Analysis/from_attention_distances/'
                         f'all_models_distances_{img_cat}_{img_lbl}_{len(model_names)}models.pkl')
 
-    filename = filename.replace('.pkl', f'input_blur{blur}.pkl') if blur else filename
+    filename = filename.replace('.pkl', f'input_blur{inp_blur}.pkl') if inp_blur else filename
 
     if not osp.isfile(filename):
         # if osp.isfile(filename.replace(f'_{len(model_names)}models', '')):  # old version, without # of models
@@ -163,7 +163,7 @@ def main():
                 if img_name == 'n04479046_15.JPEG':
                     pass
                 img_full_pth = osp.join(img_pth, img_dataset, img_cat, img_name)
-                original_image, input_tensor = load_and_preprocess_img(img_full_pth, blur, show_im_with_blur=False)
+                original_image, input_tensor = load_and_preprocess_img(img_full_pth, inp_blur, show_im_with_blur=False)
 
                 # -------------------------------
                 # 3. Forward Pass
@@ -273,7 +273,7 @@ def main():
                 ax.set_xlabel('Layer')
             ax.grid(axis='y')
 
-        plt.suptitle(f"{img_cat} ({img_lbl})\nInput Blur: {blur}")
+        plt.suptitle(f"{img_cat} ({img_lbl})\nInput Blur: {inp_blur}")
         plt.tight_layout()
 
     else:
@@ -297,7 +297,7 @@ def main():
         plt.xticks(layer_indices)
         plt.xlabel('Layer')
         plt.ylabel('Attention Distance (px)')
-        plt.title(f"{img_cat} ({img_lbl})\nInput Blur: {blur}")
+        plt.title(f"{img_cat} ({img_lbl})\nInput Blur: {inp_blur}")
         plt.legend()
         fig = plt.gcf()
         fig.set_size_inches([7.2, 4.75])
