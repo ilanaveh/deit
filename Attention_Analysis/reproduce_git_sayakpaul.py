@@ -40,9 +40,11 @@ blur = 0  # input blur
 n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
 patch_size = 16
 
-attn_layers_to_show = [3, 4, 10, 11]  # List of indices between 0-11. In git plot: [3, 4, 10, 11].
+# attn_layers_to_show = [3, 4, 10, 11]  # List of indices between 0-11. In git plot: [3, 4, 10, 11].
+attn_layers_to_show = np.arange(12)
 
-lyr_color_dict = {1: 'orange',
+lyr_color_dict = {0: 'yellow',
+                  1: 'orange',
                   2: 'olive',
                   3: 'blue',
                   4: 'green',
@@ -72,8 +74,8 @@ img_cat = 'n04479046'  # trenchcoat
 img_lbl = imagenet_idx_to_lbl[f"{imagenet_class_to_idx[img_cat]}"]
 # img_name = 'n04479046_15'
 
-fig_name = osp.join(f'../Attention_Analysis/from_attention_distances/'
-                    f'all_models_distances_{img_cat}_{img_lbl}_{len(model_names)}models.png')
+fig_name = osp.join(f'../Attention_Analysis/from_reproduce_git_sayakpaul/'
+                    f'distances_heads_and_layers_{img_cat}_{img_lbl}_{len(model_names)}models.png')
 fig_name = fig_name.replace('.png', '_sorted.png') if sort_heads else fig_name
 
 
