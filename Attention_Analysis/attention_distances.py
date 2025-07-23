@@ -18,6 +18,57 @@ import pickle
 import json
 
 
+# Dictionary for 'out' folder of each model:
+model_out_dict = {
+    'deit_blur0_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur2_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur4_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur6_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur8_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur32_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-32_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur6_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur8_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur16_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-16_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-16_tmp_fix_bug': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur16-32_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-16_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur16-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'original': 'out',
+    'deit_blur4': 'out',
+    'deit_blur8': 'out',
+    'deit_blur16': 'out',
+    'deit_blur32': 'out',
+    'deit_blur0-32_tmp': 'out',
+    'deit_blur4_rep': 'out'
+}
+
+# Create a function to get the appropriate color based on model name (from deit_plot_performance.py)
+color_map = {
+    'blur0-32': 'cyan',
+    'blur0-16': 'orange',
+    'blur16-32': 'olive',
+    'blur0': 'blue',
+    'original': 'blue',
+    'blur2': 'green',
+    'blur4': 'red',
+    'blur6': 'black',
+    'blur8': 'purple',
+    'blur16': 'pink',
+    'blur32': 'brown'
+
+}
+
+
+def get_color_for_model(model_name):
+    for blur_level in color_map.keys():
+        if blur_level in model_name:
+            return color_map[blur_level]
+    return 'gray'  # Default color if no match is found
+
+
 def main():
     save_file = False  # whether to save all_models_distances dictionary.
     save_fig = False
@@ -44,55 +95,6 @@ def main():
     blur = 0  # input blur
     n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
     patch_size = 16
-
-    # Dictionary for 'out' folder of each model:
-    model_out_dict = {
-        'deit_blur0_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur2_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur4_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur6_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur8_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur32_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur0-32_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur6_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur8_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur16_tmp_new': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur0-16_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur0-16_tmp_fix_bug': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur16-32_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur0-16_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur0-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'deit_blur16-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
-        'original': 'out',
-        'deit_blur4': 'out',
-        'deit_blur8': 'out',
-        'deit_blur16': 'out',
-        'deit_blur32': 'out',
-        'deit_blur0-32_tmp': 'out',
-        'deit_blur4_rep': 'out'
-    }
-
-    # Create a function to get the appropriate color based on model name (from deit_plot_performance.py)
-    color_map = {
-        'blur0-32': 'cyan',
-        'blur0-16': 'orange',
-        'blur16-32': 'olive',
-        'blur0': 'blue',
-        'original': 'blue',
-        'blur2': 'green',
-        'blur4': 'red',
-        'blur6': 'black',
-        'blur8': 'purple',
-        'blur16': 'pink',
-        'blur32': 'brown'
-
-    }
-
-    def get_color_for_model(model_name):
-        for blur_level in color_map.keys():
-            if blur_level in model_name:
-                return color_map[blur_level]
-        return 'gray'  # Default color if no match is found
 
     # Get Imagenet info:
     with open('imagenet1000_clsidx_to_labels.txt', 'r') as file:
