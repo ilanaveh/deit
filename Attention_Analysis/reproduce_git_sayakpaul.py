@@ -32,6 +32,7 @@ save_fig = False
 layer_indices = np.arange(12)
 head_indices = np.arange(12)
 sort_heads = True
+comp_mdls = True  # for figure: whether to split subplots by layer, and in each show different models.
 inp_blur = 0  # input blur
 limit_n_ims = 10
 attn_layers_to_show = [3, 4, 10, 11]  # List of indices between 0-11. In git plot: [3, 4, 10, 11].
@@ -86,6 +87,7 @@ img_lbl = imagenet_idx_to_lbl[f"{imagenet_class_to_idx[img_cat]}"]
 
 fig_name = osp.join(f'../Attention_Analysis/from_reproduce_git_sayakpaul/'
                     f'distances_heads_and_layers_{img_cat}_{img_lbl}_{len(model_names)}models.png')
+fig_name = fig_name.replace('.png', '_comp_models.png') if comp_mdls else fig_name
 fig_name = fig_name.replace('.png', '_sorted.png') if sort_heads else fig_name
 
 
@@ -180,23 +182,51 @@ def main():
                     all_distances[mdl][lyr][h].append(avg_scaled_distance)
 
     # plot:
-    fig = plt.figure()
-    for lyr in attn_layers_to_show:
-        color = lyr_color_dict[lyr]
-        lyr_dists = all_distances[lyr]
-        all_heads_mean_dist = [np.mean(lyr_dists[h]) for h in head_indices]
-        if sort_heads:
-            all_heads_mean_dist.sort()
-        plt.plot(head_indices, all_heads_mean_dist, marker='o', linestyle='-', color=color, label=f"block_{lyr}")
+    if comp_mdls:
+        fig, subplots = plt.subplots(3, 4)  # one subplot for each layer
+        fig.set_size_inches([10, 6])
+        subplots = subplots.flatten()
+        for lyr in layer_indices:
+            ax = subplots[lyr]
+            for mdl in model_names:
+                color = get_color_for_model(mdl)
+                all_heads_mean_dist = [np.mean(all_distances[mdl][lyr][h]) for h in head_indices]
+                if sort_heads:
+                    all_heads_mean_dist.sort()
+                ax.plot(head_indices, all_heads_mean_dist, marker='o', linestyle='-', color=color,
+                        label=mdl_label_dict[mdl])
+            ax.set_xticks(head_indices)
+            if lyr >= 8:
+                ax.set_xlabel('Attention Heads')
+            else:
+                ax.set_xticklabels([])
+            ax.set_ylim([0, 140])
+            if lyr == 4:
+                ax.set_ylabel('Mean Attention Distance (px)')
+            ax.set_title(f"Layer {lyr}")
+            if lyr == 11:
+                ax.legend()
 
-    plt.xticks(head_indices)
-    plt.xlabel('Attention Heads')
-    plt.ylabel('Mean Attention Distance (px)')
-    plt.title(f"{img_cat} ({img_lbl}), {len(lyr_dists[h])} images\nInput Blur: {inp_blur}")
-    plt.legend()
-    fig = plt.gcf()
-    fig.set_size_inches([7.2, 4.75])
-    plt.tight_layout()
+        plt.suptitle(f"{img_cat} ({img_lbl}), {len(all_distances[mdl][lyr][h])} images\nInput Blur: {inp_blur}")
+        plt.tight_layout()
+
+    else:
+        fig = plt.figure()
+        for lyr in attn_layers_to_show:
+            color = lyr_color_dict[lyr]
+            lyr_dists = all_distances[lyr]
+            all_heads_mean_dist = [np.mean(lyr_dists[h]) for h in head_indices]
+            if sort_heads:
+                all_heads_mean_dist.sort()
+            plt.plot(head_indices, all_heads_mean_dist, marker='o', linestyle='-', color=color, label=f"block_{lyr}")
+
+        plt.xticks(head_indices)
+        plt.xlabel('Attention Heads')
+        plt.ylabel('Mean Attention Distance (px)')
+        plt.title(f"{img_cat} ({img_lbl}), {len(lyr_dists[h])} images\nInput Blur: {inp_blur}")
+        plt.legend()
+        fig.set_size_inches([7.2, 4.75])
+        plt.tight_layout()
 
     if save_fig:
         plt.savefig(fig_name)
