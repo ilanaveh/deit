@@ -1,6 +1,6 @@
 """
 Repository: https://github.com/sayakpaul/probing-vits/tree/main (see attention-distance plot that I want to reproduce
-under "Visualizing mean attention distances" in README.
+under "Visualizing mean attention distances" in README).
 
 * Code for computing the mean attention distance:
     https://github.com/sayakpaul/probing-vits/blob/main/notebooks/mean-attention-distance-1k.ipynb
@@ -13,8 +13,10 @@ Their implementation is in tensorflow, and it's difficult for me to understand h
 check, try to recreate their attention-distance plot in the deit model (as I did in attention_distances.py, but without
 averaging over heads).
 
-"""
+* In this paper: https://arxiv.org/pdf/2108.08810, they show similar plots (Figs. 3,4) but with the heads sorted. I
+    added this option here as well.
 
+"""
 
 import timm
 import torch
@@ -40,8 +42,8 @@ blur = 0  # input blur
 n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
 patch_size = 16
 
-# attn_layers_to_show = [3, 4, 10, 11]  # List of indices between 0-11. In git plot: [3, 4, 10, 11].
-attn_layers_to_show = np.arange(12)
+attn_layers_to_show = [3, 4, 10, 11]  # List of indices between 0-11. In git plot: [3, 4, 10, 11].
+# attn_layers_to_show = np.arange(12)
 
 lyr_color_dict = {0: 'yellow',
                   1: 'orange',
