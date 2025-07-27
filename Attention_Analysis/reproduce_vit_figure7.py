@@ -36,16 +36,17 @@ from attention_distances import model_out_dict, color_map, get_color_for_model
 save_fig = True
 sep_panels = True
 color_heads = True
+sort_heads = True
+inp_blur = 0  # input blur
+limit_n_ims = 10
+model_names = ['pretrained', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur0-16_tmp_fix_bug']
+# See attention_distances for full list of models (in model_out_dict)
 
 layer_indices = np.arange(12)
 head_indices = np.arange(12)
-model_names = ['pretrained', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur0-16_tmp_fix_bug']
 
-blur = 0  # input blur
 n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
 patch_size = 16
-
-limit_n_ims = 10
 
 mdl_label_dict = {
     'pretrained': 'pretrained',
@@ -58,18 +59,18 @@ mdl_label_dict = {
 color_map['pretrained'] = 'magenta'
 
 # Color map for heads:
-head_color_dict = {0: 'yellow',
-                   1: 'orange',
-                   2: 'olive',
-                   3: 'blue',
-                   4: 'green',
+head_color_dict = {0: 'cyan',
+                   1: 'blue',
+                   2: 'green',
+                   3: 'olive',
+                   4: 'grey',
                    5: 'black',
-                   6: 'purple',
-                   7: 'brown',
+                   6: 'brown',
+                   7: 'purple',
                    8: 'pink',
-                   9: 'grey',
-                   10: 'red',
-                   11: 'cyan'}
+                   9: 'red',
+                   10: 'orange',
+                   11: 'yellow'}
 
 # Get Imagenet info:
 with open('imagenet1000_clsidx_to_labels.txt', 'r') as file:
@@ -92,7 +93,11 @@ img_lbl = imagenet_idx_to_lbl[f"{imagenet_class_to_idx[img_cat]}"]
 fig_name = osp.join(f'../Attention_Analysis/from_reproduce_vit_figure7/'
                     f'distances_scatter_{img_cat}_{img_lbl}_{len(model_names)}models.png')
 fig_name = fig_name.replace('.png', '_sep_panels.png') if sep_panels else fig_name
-fig_name = fig_name.replace('.png', '_clrd_heads.png') if color_heads else fig_name
+fig_name = fig_name.replace('.png', '_clrd_sorted_heads.png') if (color_heads and sort_heads) \
+    else fig_name.replace('.png', '_clrd_sorted_heads.png') if color_heads \
+    else fig_name.replace('.png', '_sorted_heads.png') if sort_heads \
+    else fig_name
+fig_name = fig_name.replace('.png', f'_input_blur{inp_blur}.png') if inp_blur else fig_name
 
 
 def main():
@@ -128,7 +133,7 @@ def main():
                 continue
             print(f"image {i}")
             img_full_pth = osp.join(img_pth, img_dataset, img_cat, img_name)
-            original_image, input_tensor = load_and_preprocess_img(img_full_pth, blur, show_im_with_blur=False)
+            original_image, input_tensor = load_and_preprocess_img(img_full_pth, inp_blur, show_im_with_blur=False)
 
             # -------------------------------
             # 3. Forward Pass
@@ -200,13 +205,15 @@ def main():
                 lyr_dists = all_distances[mdl][lyr]
                 all_heads_mean_dist = [np.mean(lyr_dists[h]) for h in head_indices]
                 if color_heads:
+                    if sort_heads:
+                        all_heads_mean_dist.sort()
                     for h in head_indices:
                         color = head_color_dict[h]
                         ax.scatter(lyr, all_heads_mean_dist[h], marker='o', color=color)
                 else:
                     ax.scatter(np.repeat(lyr, len(all_heads_mean_dist)), all_heads_mean_dist, marker='o', color='b')
 
-        plt.suptitle(f"{img_cat} ({img_lbl}), {len(lyr_dists[h])} images\nInput Blur: {blur}")
+        plt.suptitle(f"{img_cat} ({img_lbl}), {len(lyr_dists[h])} images\nInput Blur: {inp_blur}")
         plt.tight_layout()
 
     else:
