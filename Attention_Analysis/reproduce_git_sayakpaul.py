@@ -33,9 +33,10 @@ layer_indices = np.arange(12)
 head_indices = np.arange(12)
 sort_heads = True
 comp_mdls = True  # for figure: whether to split subplots by layer, and in each show different models.
+choose_mdl = 'pretrained'  # choose one of the models in "model_names"; relevant only if comp_mdls=False.
 inp_blur = 0  # input blur
 limit_n_ims = 10
-attn_layers_to_show = [3, 4, 10, 11]  # List of indices between 0-11. In git plot: [3, 4, 10, 11].
+attn_layers_to_show = [0, 1, 4, 5, 10, 11]  # List of indices between 0-11. In git plot: [3, 4, 10, 11].
 # attn_layers_to_show = np.arange(12)
 
 model_names = ['pretrained', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
@@ -89,7 +90,9 @@ img_lbl = imagenet_idx_to_lbl[f"{imagenet_class_to_idx[img_cat]}"]
 # img_name = 'n04479046_15'
 
 fig_name = osp.join(f'../Attention_Analysis/from_reproduce_git_sayakpaul/'
-                    f'distances_heads_and_layers_{img_cat}_{img_lbl}_{len(model_names)}models.png')
+                    f'distances_heads_and_layers_{img_cat}_{img_lbl}.png')
+fig_name = fig_name.replace('.png', f'_{len(model_names)}models.png') if comp_mdls else \
+    fig_name.replace('.png', f'_model_{choose_mdl}.png')
 fig_name = fig_name.replace('.png', '_comp_models.png') if comp_mdls else fig_name
 fig_name = fig_name.replace('.png', '_sorted.png') if sort_heads else fig_name
 fig_name = fig_name.replace('.png', f'_input_blur{inp_blur}.png') if inp_blur else fig_name
@@ -216,9 +219,10 @@ def main():
 
     else:
         fig = plt.figure()
+        mdl = choose_mdl
         for lyr in attn_layers_to_show:
             color = lyr_color_dict[lyr]
-            lyr_dists = all_distances[lyr]
+            lyr_dists = all_distances[mdl][lyr]
             all_heads_mean_dist = [np.mean(lyr_dists[h]) for h in head_indices]
             if sort_heads:
                 all_heads_mean_dist.sort()
@@ -227,7 +231,7 @@ def main():
         plt.xticks(head_indices)
         plt.xlabel('Attention Heads')
         plt.ylabel('Mean Attention Distance (px)')
-        plt.title(f"{img_cat} ({img_lbl}), {len(lyr_dists[h])} images\nInput Blur: {inp_blur}")
+        plt.title(f"{img_cat} ({img_lbl}), {len(lyr_dists[h])} images\nInput Blur: {inp_blur}\n(model: {mdl})")
         plt.legend()
         fig.set_size_inches([7.2, 4.75])
         plt.tight_layout()
