@@ -38,7 +38,8 @@ limit_n_ims = 10
 attn_layers_to_show = [3, 4, 10, 11]  # List of indices between 0-11. In git plot: [3, 4, 10, 11].
 # attn_layers_to_show = np.arange(12)
 
-model_names = ['pretrained', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur0-16_tmp_fix_bug']
+model_names = ['pretrained', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
+               'deit_blur0-16_tmp_fix_bug', 'deit_blur0-32_tmp_new']
 # See attention_distances for full list of models (in model_out_dict)
 
 n_patches = 14  # property of deit (14 patches in each row/column -> total 196 patches).
@@ -48,7 +49,9 @@ mdl_label_dict = {
     'pretrained': 'pretrained',
     'deit_blur0_tmp_new': 'high-res',
     'deit_blur16_tmp_new': 'Uniform blur (16)',
-    'deit_blur0-16_tmp_fix_bug': 'Variable blur (0-16)'
+    'deit_blur32_tmp_new': 'Uniform blur (32)',
+    'deit_blur0-16_tmp_fix_bug': 'Variable blur (0-16)',
+    'deit_blur0-32_tmp_new': 'Variable blur (0-32)'
 }
 
 # Add 'pretrained' to color_map:
@@ -89,6 +92,7 @@ fig_name = osp.join(f'../Attention_Analysis/from_reproduce_git_sayakpaul/'
                     f'distances_heads_and_layers_{img_cat}_{img_lbl}_{len(model_names)}models.png')
 fig_name = fig_name.replace('.png', '_comp_models.png') if comp_mdls else fig_name
 fig_name = fig_name.replace('.png', '_sorted.png') if sort_heads else fig_name
+fig_name = fig_name.replace('.png', f'_input_blur{inp_blur}.png') if inp_blur else fig_name
 
 
 def main():
