@@ -274,12 +274,14 @@ def main(args):
         # Add blur transform to train & val dataloaders (single blur):
         data_loader_train.dataset.transform = add_blur_transform(data_loader_train.dataset.transform, args.blur)
         data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ For creating Tensorboard log: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     if utils.is_main_process():
-        tb_dir = args.output_dir.replace('out', 'board')
+        tb_dir = os.path.join(args.output_dir.replace('out', 'board'),
+                              "{}_epochs/{}".format(args.epochs, args.model_name))
         print(f'Creating Tensorboard directory: {tb_dir}')
-        writer_tb = SummaryWriter(log_dir=os.path.join(tb_dir, "{}_epochs/{}".format(args.epochs, args.model_name)))
+        writer_tb = SummaryWriter(log_dir=tb_dir)
     else:
         writer_tb = None
 
