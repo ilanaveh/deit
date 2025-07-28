@@ -26,7 +26,7 @@ from timm.utils import NativeScaler, get_state_dict, ModelEma
 from timm.optim import create_optimizer
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.scheduler import create_scheduler
-from deit.datasets import build_dataset
+from deit.datasets import build_dataset, add_blur_transform
 from Code_from_Liel.modeling_finetune import inject_lora_vit
 import loralib as lora
 import time
@@ -39,7 +39,7 @@ from tensorboardX import SummaryWriter
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
     parser.add_argument('--batch-size', default=64, type=int)
-    parser.add_argument('--epochs', default=100, type=int)  # Change to 30, as in Liel's code.
+    parser.add_argument('--epochs', default=150, type=int)  # Change to 30, as in Liel's code.
     parser.add_argument('--bce-loss', action='store_true')
     parser.add_argument('--unscale-lr', action='store_true')
 
@@ -49,6 +49,12 @@ def get_args_parser():
     parser.add_argument('--model', default='deit_base_patch16_224', type=str, metavar='MODEL',
                         help='Name of model to train')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
+
+    parser.add_argument('--load_pretrained', action='store_true', help='whether to load pretrained deit model.')
+
+    parser.add_argument('--deit_model_dir', default='out', type=str, help='directory (within "deit") of deit model')
+    parser.add_argument('--deit_model_name', default=None, type=str,
+                        help='model name, or None for original (pretrained or not, according to args.load_pretrained)')
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
                         help='Dropout rate (default: 0.)')
@@ -264,6 +270,10 @@ def main(args):
         drop_last=False
     )
 
+    if args.blur:
+        # Add blur transform to train & val dataloaders (single blur):
+        data_loader_train.dataset.transform = add_blur_transform(data_loader_train.dataset.transform, args.blur)
+        data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ For creating Tensorboard log: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     if utils.is_main_process():
@@ -283,10 +293,13 @@ def main(args):
             prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
-    print(f"Creating model: {args.model}")
+    crt_mdl_msg = f"Creating model: {args.model}"
+    crt_mdl_msg = crt_mdl_msg + " (with pretrained weights)" if args.load_pretrained else crt_mdl_msg + " (untrained)"
+    print(crt_mdl_msg)
+
     model = create_model(
         args.model,
-        pretrained=False,
+        pretrained=args.load_pretrained,
         num_classes=args.nb_classes,
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
@@ -295,6 +308,25 @@ def main(args):
     )
 
     model.to(device)  # need this for model_ema (so it would be on cuda). Later, add again to move lora layers to cuda.
+
+    # Load trained checkpoint:
+    if args.deit_model_name:
+        deit_model_path = os.path.join('/home/projects/bagon/ilanaveh/code/Transformers/deit', args.deit_model_dir,
+                                   args.deit_model_name)
+
+        deit_checkpoint = torch.load(os.path.join(deit_model_path, 'best_checkpoint.pth'), map_location='cpu')
+
+        # Remove the classification-head weights from deit checkpoint:
+        deit_checkpoint_no_head = {k: v for k, v in deit_checkpoint['model'].items() if not k.startswith('head.')}
+
+        missing, unexpected = model.load_state_dict(deit_checkpoint_no_head, strict=False)
+        assert missing == ['head.weight', 'head.bias']
+        assert unexpected == []
+
+        print(f">> Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}")
+
+        with (output_dir / "log.txt").open("a") as f:
+            f.write(f"Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}" + "\n")
 
     model_ema = None
     if args.model_ema:
