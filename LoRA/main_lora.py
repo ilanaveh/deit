@@ -209,6 +209,9 @@ def get_args_parser():
     # blur parameter
     parser.add_argument('--blur', default=0, type=int, help='Sigma of the Gaussian blur')
     parser.add_argument('--blur_max', default=None, type=int, help='For Variable-Blur training: max sigma')
+    parser.add_argument('--blur_for_tb_log', default=None, type=int,
+                        help='For Variable-Blur training: blur to show in TB logging (validation). '
+                             'Default (if None): blur_max')
 
     parser.add_argument('--chosen-imgs-pth',
                         default='/home/projects/bagon/ilanaveh/code/Transformers/deit/ims2save_for_logging/ims2save.txt',
@@ -322,6 +325,9 @@ def main(args):
                               "{}_epochs/{}".format(args.epochs, args.model_name))
         print(f'Creating Tensorboard directory: {tb_dir}')
         writer_tb = SummaryWriter(log_dir=tb_dir)
+
+        if args.blur_max and not args.blur_for_tb_log:
+            args.blur_for_tb_log = args.blur_max
     else:
         writer_tb = None
 
@@ -491,17 +497,36 @@ def main(args):
 
     if args.start_epoch == 0:
         # Get test accuracy before training starts:
-        test_stats = evaluate(data_loader_val, model, device)
-        print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with blur "
-              f"{args.blur}: {test_stats['acc1']:.1f}%")
+        if args.blur_max:
+            test_stats_blurs = {b: evaluate(dataloaders_val_blurs[b], model, device)
+                                for b in range(args.blur, args.blur_max + 1)}
+
+            print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with minimal blur "
+                  f"({args.blur}): {test_stats_blurs[args.blur]['acc1']:.1f}%")
+
+            print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
+                  f"({args.blur_max}): {test_stats_blurs[args.blur_max]['acc1']:.1f}%")
+        else:
+            test_stats = evaluate(data_loader_val, model, device)
+            print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with blur "
+                  f"{args.blur}: {test_stats['acc1']:.1f}%")
         args.start_epoch = 1
 
         max_accuracy = test_stats["acc1"]
 
         if writer_tb is not None:
-            print('Writing TB Val, epoch 0')
-            writer_tb.add_scalar('Loss/Val_Loss', test_stats['loss'], 0)
-            writer_tb.add_scalar('Accuracy/Val_Acc', test_stats['acc1'], 0)
+
+            if args.blur_max:
+                print(f'Writing TB Val, epoch 0, results for input blur: {args.blur_for_tb_log}')
+                val_loss_for_tb = test_stats[args.blur_for_tb_log]['loss']
+                val_acc1_for_tb = test_stats[args.blur_for_tb_log]['acc1']
+            else:
+                print('Writing TB Val, epoch 0')
+                val_loss_for_tb = test_stats['loss']
+                val_acc1_for_tb = test_stats['acc1']
+
+            writer_tb.add_scalar('Loss/Val_Loss', val_loss_for_tb, 0)
+            writer_tb.add_scalar('Accuracy/Val_Acc', val_acc1_for_tb, 0)
 
     for epoch in range(args.start_epoch, args.epochs + 1):
         if args.distributed:
@@ -634,9 +659,17 @@ def main(args):
             writer_tb.add_scalar('Loss/Train_Loss', train_stats['loss'], epoch)
             writer_tb.add_scalar('Accuracy/Train_Acc', train_stats['acc1'], epoch)
 
-            print('Writing TB Val, epoch {}'.format(epoch))
-            writer_tb.add_scalar('Loss/Val_Loss', test_stats['loss'], epoch)
-            writer_tb.add_scalar('Accuracy/Val_Acc', test_stats['acc1'], epoch)
+            if args.blur_max:
+                print(f'Writing TB Val, epoch {epoch}, results for input blur: {args.blur_for_tb_log}')
+                val_loss_for_tb = test_stats[args.blur_for_tb_log]['loss']
+                val_acc1_for_tb = test_stats[args.blur_for_tb_log]['acc1']
+            else:
+                print(f'Writing TB Val, epoch {epoch}')
+                val_loss_for_tb = test_stats['loss']
+                val_acc1_for_tb = test_stats['acc1']
+            
+            writer_tb.add_scalar('Loss/Val_Loss', val_loss_for_tb, epoch)
+            writer_tb.add_scalar('Accuracy/Val_Acc', val_acc1_for_tb, epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
