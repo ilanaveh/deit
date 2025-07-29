@@ -169,7 +169,7 @@ def get_args_parser():
                         help='dataset path')
     parser.add_argument('--data-set', default='Affectnet', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19', 'Affectnet'],
                         type=str, help='dataset path, changed to affectnet for finetuning')
-    parser.add_argument('--desired_classes', default=[1, 6], type=list,
+    parser.add_argument('--desired_classes', default=[1, 6], type=int, nargs='+',
                         help='0: Neutral, 1: Happiness, 2: Sadness, 3: Surprise, 4: Fear, 5: Disgust, 6: Anger, '
                              '7: Contempt, 8: None, 9: Uncertain, 10: No-Face.ToDo: decide which classes I want.')
     parser.add_argument('--balance_clss', default=True, type=bool,
@@ -233,16 +233,21 @@ def main(args):
     np.random.seed(seed)
 
     cudnn.benchmark = True
+
+    n_cls = len(args.desired_classes)
+
     # Change model name to format:
     #   "finetune_deit_model_blur{deit_model_training_blur}_lora_blur{lora_training_blur}_{suf}"
     # If starting from original pretrained deit (i.e. args.deit_model_name=None):
     #   "finetune_deit_model_original_lora_blur{lora_training_blur}_{suf}"
+    # * If using more than 2 classes from affectnet, add "_{n}cls" before suf.
     deit_model_blur = args.deit_model_name.split('blur')[1].split('_')[0] if args.deit_model_name else ''
     args.model_name = f"finetune_deit_model_blur{deit_model_blur}" \
         if args.deit_model_name else "finetune_deit_model_original"
     args.model_name = args.model_name + '_lora_blur{}'.format(args.blur)
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
+    args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
 
     print(f"Model name: {args.model_name}")
@@ -250,8 +255,10 @@ def main(args):
     output_dir = Path(args.output_dir) / args.model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
-    print(f"Creating dataset: {args.data_set}")
+    print(f"Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
+    print("Train Dataset:")
     dataset_train, args.nb_classes = build_dataset_blur(is_train=True, args=args, return_blur=bool(args.blur_max))
+    print("Validation Dataset:")
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
     if args.distributed:
