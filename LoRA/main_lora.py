@@ -244,8 +244,10 @@ def main(args):
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
-    output_dir = Path(args.output_dir) / args.model_name
 
+    print(f"Model name: {args.model_name}")
+
+    output_dir = Path(args.output_dir) / args.model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
     print(f"Creating dataset: {args.data_set}")
@@ -506,13 +508,17 @@ def main(args):
 
             print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
                   f"({args.blur_max}): {test_stats_blurs[args.blur_max]['acc1']:.1f}%")
+
+            max_accuracy = test_stats_blurs[args.blur]["acc1"]
+
         else:
             test_stats = evaluate(data_loader_val, model, device)
             print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with blur "
                   f"{args.blur}: {test_stats['acc1']:.1f}%")
-        args.start_epoch = 1
 
-        max_accuracy = test_stats["acc1"]
+            max_accuracy = test_stats["acc1"]
+
+        args.start_epoch = 1
 
         if writer_tb is not None:
 
@@ -667,7 +673,7 @@ def main(args):
                 print(f'Writing TB Val, epoch {epoch}')
                 val_loss_for_tb = test_stats['loss']
                 val_acc1_for_tb = test_stats['acc1']
-            
+
             writer_tb.add_scalar('Loss/Val_Loss', val_loss_for_tb, epoch)
             writer_tb.add_scalar('Accuracy/Val_Acc', val_acc1_for_tb, epoch)
 
