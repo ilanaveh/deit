@@ -328,25 +328,104 @@ class BlurDataset(ImageFolder):
             return sample, target
 
 
+class BlurAffectnetDataset(AffectnetDataset):
+    """
+    Based on AffectnetDataset, but add the blur-related code from BlurDataset (i.e. return the applied blur level in
+    addition to the image & save example images)
+    """
+
+    def __init__(
+            self,
+            root,
+            transform,
+            return_blur,
+            chosen_imgs_lst=[],
+            save_imgs_pth='',
+            des_classes=[],
+            balance_clss=False,
+            debug=False):
+
+        super().__init__(root, transform=transform, des_classes=des_classes, balance_clss=balance_clss, debug=debug)
+        self.return_blur = return_blur
+        self.chosen_imgs_lst = chosen_imgs_lst
+        self.save_imgs_pth = save_imgs_pth
+
+    # Override the __getitem__ method, s.t. the blur level applied for each image is returned (from BlurDataset):
+    def __getitem__(self, index):
+
+        # 1. Copy the original ImageFolder getitem method, but add applied_blur as output if GaussianBlurRand is used:
+        path, target = self.samples[index]
+        sample = self.loader(path)
+        if self.transform is not None:
+            if self.return_blur:
+                sample, applied_blur = self.transform(sample)
+            else:
+                sample = self.transform(sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        # Save example images:
+        im_nm = path.split('/')[-1].split('.JPEG')[0]
+        if self.chosen_imgs_lst and (im_nm in self.chosen_imgs_lst) and self.save_imgs_pth:
+            im_save_nm = '{}_blur{}.png'.format(im_nm, applied_blur) if self.return_blur else '{}.png'.format(im_nm)
+            if not os.path.isfile(os.path.join(self.save_imgs_pth, im_save_nm)):
+                sample_norm = (sample - sample.min()) / (sample.max() - sample.min()) * 255
+                sample_numpy = np.array(sample_norm.permute(1, 2, 0)).astype('uint8')
+                plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm), sample_numpy)
+                # For creating image with only Blur transform:
+                if isinstance(self.transform.transforms[0], GaussianBlurRand) or \
+                        isinstance(self.transform.transforms[0], GaussianBlur):
+                    sample_for_blur = self.loader(path)
+                    if self.return_blur:
+                        blur_trans = GaussianBlur(applied_blur)
+                    else:
+                        blur_trans = self.transform.transforms[0]
+                    sample_blurred = blur_trans(sample_for_blur)
+                    sample_blur_numpy = np.array(sample_blurred)
+                    plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm.replace('.png', '_onlyBlur.png')),
+                               sample_blur_numpy)
+
+        # 2. return blur level, in addition to sample & target.
+        if self.return_blur:
+            return sample, target, applied_blur
+        else:
+            return sample, target
+
+
 def build_dataset_blur(is_train, args, return_blur=False):
     """
     based on 'build_dataset', but calls BlurDataset instead of ImageFolder.
     """
     transform = build_transform(is_train, args)
 
-    assert args.data_set == 'IMNET'  # assume using imagenet.
+    # assume using imagenet, 29/7/25: or Affectnet for lora
+    assert args.data_set == 'IMNET' or args.data_set == 'Affectnet'
 
-    root = os.path.join(args.data_path, 'train' if is_train else 'val')
+    if args.data_set == 'IMNET':
+        root = os.path.join(args.data_path, 'train' if is_train else 'val')
+        if args.chosen_imgs_pth and os.path.isfile(args.chosen_imgs_pth):
+            with open(args.chosen_imgs_pth, "r") as file:
+                list_json = file.read()
+            chosen_imgs_lst = json.loads(list_json)
+        else:
+            chosen_imgs_lst = []
+        dataset = BlurDataset(root, transform=transform, return_blur=return_blur, chosen_imgs_lst=chosen_imgs_lst,
+                              save_imgs_pth=os.path.join(args.output_dir, args.model_name))
+        nb_classes = 1000
 
-    if args.chosen_imgs_pth and os.path.isfile(args.chosen_imgs_pth):
-        with open(args.chosen_imgs_pth, "r") as file:
-            list_json = file.read()
-        chosen_imgs_lst = json.loads(list_json)
-    else:
-        chosen_imgs_lst = []
-    dataset = BlurDataset(root, transform=transform, return_blur=return_blur, chosen_imgs_lst=chosen_imgs_lst,
-                          save_imgs_pth=os.path.join(args.output_dir, args.model_name))
-    nb_classes = 1000
+    elif args.data_set == "Affectnet":
+        root = os.path.join(args.data_path, 'train_set' if is_train else 'val_set')
+        if args.chosen_imgs_pth and os.path.isfile(args.chosen_imgs_pth):
+            with open(args.chosen_imgs_pth, "r") as file:
+                list_json = file.read()
+            chosen_imgs_lst = json.loads(list_json)
+        else:
+            chosen_imgs_lst = []
+        nb_classes = len(args.desired_classes)
+        dataset = BlurAffectnetDataset(root, transform=transform, des_classes=args.desired_classes,
+                                       balance_clss=args.balance_clss, debug=args.debug, return_blur=return_blur,
+                                       chosen_imgs_lst=chosen_imgs_lst,
+                                       save_imgs_pth=os.path.join(args.output_dir, args.model_name))
 
     return dataset, nb_classes
 
