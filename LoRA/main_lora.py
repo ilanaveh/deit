@@ -230,11 +230,17 @@ def main(args):
     np.random.seed(seed)
 
     cudnn.benchmark = True
-
-    args.model_name = args.model_name + '_blur{}'.format(args.blur)
+    # Change model name to format:
+    #   "finetune_deit_model_blur{deit_model_training_blur}_lora_blur{lora_training_blur}_{suf}"
+    # If starting from original pretrained deit (i.e. args.deit_model_name=None):
+    #   "finetune_deit_model_original_lora_blur{lora_training_blur}_{suf}"
+    deit_model_blur = args.deit_model_name.split('blur')[1].split('_')[0] if args.deit_model_name else ''
+    args.model_name = f"finetune_deit_model_blur{deit_model_blur}" \
+        if args.deit_model_name else "finetune_deit_model_original"
+    args.model_name = args.model_name + '_lora_blur{}'.format(args.blur)
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
-    args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
+    args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     output_dir = Path(args.output_dir) / args.model_name
 
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
