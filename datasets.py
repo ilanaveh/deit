@@ -90,6 +90,7 @@ class AffectnetDataset(ImageFolder):
         # Initialize dictionary for keeping track of how many images from each class:
         if self.balance_clss or self.limit_dataset_size:
             track_num_ims_each_clss = {c: 0 for c in self.des_classes}
+            target_num = self.limit_dataset_size if self.limit_dataset_size else des_ims_each_clss
 
         # Initialize list of image paths and labels
         images = []
@@ -100,13 +101,15 @@ class AffectnetDataset(ImageFolder):
             if img.lower().endswith(extensions):
                 ann = int(np.load(os.path.join(ann_path, (im_id + '_exp.npy'))))
                 if ann in self.des_classes:
-                    if (not self.balance_clss) or (track_num_ims_each_clss[ann] < des_ims_each_clss):
+                    if (not self.balance_clss and not self.limit_dataset_size) \
+                            or (track_num_ims_each_clss[ann] < target_num):
                         path = os.path.join(images_path, img)
                         images.append((path, self.class_to_idx[ann]))
                         if self.balance_clss or self.limit_dataset_size:
-                            target_num = self.limit_dataset_size if self.limit_dataset_size else des_ims_each_clss
                             track_num_ims_each_clss[ann] += 1
                             if np.all([v >= target_num for v in track_num_ims_each_clss.values()]):
+                                for ann, v in track_num_ims_each_clss.items():
+                                    print(f"Number of images from class {ann}: {v}")
                                 break
 
         return images
