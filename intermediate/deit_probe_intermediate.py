@@ -19,7 +19,7 @@ import shutil
 import argparse
 from PIL import ImageFilter
 from tensorboardX import SummaryWriter
-
+import random  # for GaussianBlurRand
 
 
 def main():
@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--deit_model_name', default=None, type=str, help='model name, or None for untrained detr')
     parser.add_argument('--deit_blur', default=0, type=int, help='blur sigma of the model')
     parser.add_argument('--inp_blur', default=0, type=int, help='blur sigma of the inputs for atts training')
+    parser.add_argument('--inp_blur_max', default=None, type=int, help='For Variable-Blur training: max sigma')
     parser.add_argument('--lr_drop', default=None, type=int, help='after how many epochs reduce LR by factor 10')
 
     args = parser.parse_args()
@@ -56,18 +57,22 @@ def main():
     # Change name of atts model, according to the LR & input blur:
     if args.lr_drop:
         lr_decay = True
-        model_name += '_lrDecayFrom{}'.format(args.lr)
+        # model_name += '_lrDecayFrom{}'.format(args.lr)
     else:
         lr_decay = False
-        model_name += '_lr{}'.format(args.lr)
+        # model_name += '_lr{}'.format(args.lr)
 
-    if args.inp_blur:
-        model_name += '_inpBlur{}'.format(args.inp_blur)
+    model_name += '_inpBlur{}'.format(args.inp_blur)
 
-    # change name of atts model, according to batch size:
-    model_name += '_BS{}'.format(args.batch_size)
+    if args.inp_blur_max:
+        model_name += '-{}'.format(args.inp_blur_max)
+
+    # # change name of atts model, according to batch size:
+    # model_name += '_BS{}'.format(args.batch_size)
 
     model_name = model_name + db_suf
+
+    print("Model Name: {}".format(model_name))
 
     home_dir = '/home/projects/bagon/ilanaveh'
     dataset_path = osp.join(home_dir, 'data/AffectNet/train_set')
@@ -118,23 +123,33 @@ def main():
     mean_rgb = [0.485, 0.456, 0.406]
     std_rgb = [0.229, 0.224, 0.225]
 
-    if args.inp_blur:
-        transforms = T.Compose([GaussianBlur(int(args.inp_blur)),
-                                T.ToTensor(), T.Normalize(mean=mean_rgb, std=std_rgb)])
+    if args.inp_blur_max:
+        transforms_train = T.Compose([GaussianBlurRand(int(args.inp_blur), int(args.inp_blur_max)),
+                                      T.ToTensor(), T.Normalize(mean=mean_rgb, std=std_rgb)])
+        transforms_val = T.Compose([GaussianBlur(int(args.inp_blur_max)),
+                                    T.ToTensor(), T.Normalize(mean=mean_rgb, std=std_rgb)])
+
     else:
-        transforms = T.Compose([T.ToTensor(), T.Normalize(mean=mean_rgb, std=std_rgb)])
+        if args.inp_blur:
+            transforms = T.Compose([GaussianBlur(int(args.inp_blur)),
+                                    T.ToTensor(), T.Normalize(mean=mean_rgb, std=std_rgb)])
+        else:
+            transforms = T.Compose([T.ToTensor(), T.Normalize(mean=mean_rgb, std=std_rgb)])
+
+        transforms_train = transforms
+        transforms_val = transforms
 
     train_dataset = AttsDatasetFixed(
         csv_file=osp.join(dataset_path, 'AffectNet_lbls_phase.csv'),
         root_dir=data_dir,
-        transform=transforms,
+        transform=transforms_train,
         phase='train',
         return_im_name=True)
 
     val_dataset = AttsDatasetFixed(
         csv_file=osp.join(dataset_path, 'AffectNet_lbls_phase.csv'),
         root_dir=data_dir,
-        transform=transforms,
+        transform=transforms_val,
         phase='val',
         return_im_name=True)
 
@@ -425,6 +440,46 @@ class GaussianBlur(object):
 
     def __repr__(self):
         return self.__class__.__name__ + '(sigma={0})'.format(self.sigma)
+
+
+class GaussianBlurRand(object):
+    """
+    Apply Gaussian blur filter to the input PIL Image, with a rondom choice between self.sigma_min-self.sigma_max.
+    if no sigma_max is given (or if sigma_min = sigma_max) -> same as regular GaussianBlur.
+    Taken from: DeepLabv3FineTuning-disClasses/pretraining_resnet/pretrain_resnet_var_blurs.py.
+    Args:
+        sigma_min (int): Desired Gaussian blur level sigma / lower bound
+        sigma_max (int; optional): Upper bound.
+   """
+
+    def __init__(self, sigma_min=0, sigma_max=None):
+        assert isinstance(sigma_min, int)
+        self.is_range = bool(sigma_max) & (sigma_min != sigma_max)
+        self.sigma_min = sigma_min
+        self.sigma_max = sigma_max
+
+    def __call__(self, img, return_blur=False):
+        """
+        Args:
+            img (PIL Image): Image to be scaled.
+            return_blur (bool): Whether to return the chosen blur sigma.
+        Returns:
+            PIL Image: Rescaled image.
+            if return_blur=True: also return the chosen blur sigma.
+        """
+
+        radius = random.randint(self.sigma_min, self.sigma_max) if self.is_range else self.sigma_min
+        img = img.filter(ImageFilter.GaussianBlur(radius=radius))
+        if return_blur:
+            return img, radius
+        else:
+            return img
+
+    def __repr__(self):
+        if self.is_range:
+            return self.__class__.__name__ + '(sigma={}-{})'.format(self.sigma_min, self.sigma_max)
+        else:
+            return self.__class__.__name__ + '(sigma={})'.format(self.sigma_min)
 
 
 if __name__ == '__main__':
