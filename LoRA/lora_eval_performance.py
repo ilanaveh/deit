@@ -47,8 +47,9 @@ def get_args_parser():
 
     parser.add_argument('--load_pretrained', action='store_true', help='whether to load pretrained deit model.')
 
-    parser.add_argument('--deit_model_dir', default='out', type=str, help='directory (within "deit") of deit model')
-    parser.add_argument('--deit_model_name', default=None, type=str,
+    # Instead of deit_model, add lora_model params - for starting from a trained lora model:
+    parser.add_argument('--lora_model_dir', default='out', type=str, help='directory (within "deit/LoRA") of lora mdl')
+    parser.add_argument('--lora_model_name', default=None, type=str,
                         help='model name, or None for original (pretrained or not, according to args.load_pretrained)')
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
@@ -219,7 +220,7 @@ def get_args_parser():
 def main(args):
     utils.init_distributed_mode(args)
     device = torch.device(args.device)
-    args.debug = torch.cuda.device_count() == 1
+    args.debug = False
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
@@ -228,52 +229,16 @@ def main(args):
 
     cudnn.benchmark = True
 
+    # Change args.desired_classes according to lora_model_name:
+    args.desired_classes = [1, 2, 3, 6] if '_4cls' in args.lora_model_name else [1, 6]
+
     n_cls = len(args.desired_classes)
 
-    # Change model name to format:
-    #   "finetune_deit_model_blur{deit_model_training_blur}_lora_blur{lora_training_blur}_{suf}"
-    # If starting from original pretrained deit (i.e. args.deit_model_name=None):
-    #   "finetune_deit_model_original_lora_blur{lora_training_blur}_{suf}"
-    # * If using more than 2 classes from affectnet, add "_{n}cls" before suf.
-    deit_model_blur = args.deit_model_name.split('blur')[1].split('_')[0] if args.deit_model_name else ''
-    args.model_name = f"finetune_deit_model_blur{deit_model_blur}" \
-        if args.deit_model_name else "finetune_deit_model_original"
-    args.model_name = args.model_name + '_lora_blur{}'.format(args.blur)
-    args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
-    args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
-    args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
-    args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
-
-    print(f"Model name: {args.model_name}")
-
-    output_dir = Path(args.output_dir) / args.model_name
-    output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
-
     print(f"Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
-    print("Train Dataset:")
-    dataset_train, args.nb_classes = build_dataset_blur(is_train=True, args=args, return_blur=bool(args.blur_max))
     print("Validation Dataset:")
-    dataset_val, _ = build_dataset(is_train=False, args=args)
-
-    if args.distributed:
-        num_tasks = utils.get_world_size()
-        global_rank = utils.get_rank()
-
-        sampler_train = torch.utils.data.DistributedSampler(
-            dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
-        )
-    else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
+    dataset_val, args.nb_classes = build_dataset(is_train=False, args=args)
 
     sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-
-    data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=True,
-    )
 
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
@@ -283,61 +248,9 @@ def main(args):
         drop_last=False
     )
 
-    if args.blur_max:
-        # 1. Add blur transform to train dataloader, with range of blurs:
-        data_loader_train.dataset.transform = \
-            add_blur_transform(data_loader_train.dataset.transform, args.blur, blur_max=args.blur_max,
-                               use_custom_compose=True)
-
-        # 2. Add blur transform to val dataloader (only blur_max, since there was an error with the multiple loaders)
-        data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur_max)
-
-    #     # 2. Create val dataloaders for each of the blurs in range:
-    #     datasets_val_blurs = {b: build_dataset(is_train=False, args=args)[0]
-    #                           for b in range(args.blur, args.blur_max + 1)}
-    #
-    #     dataloaders_val_blurs = {b:
-    #         torch.utils.data.DataLoader(
-    #             datasets_val_blurs[b], sampler=sampler_val,
-    #             batch_size=int(1.5 * args.batch_size),
-    #             num_workers=args.num_workers,
-    #             pin_memory=args.pin_mem,
-    #             drop_last=False
-    #         ) for b in range(args.blur, args.blur_max + 1)}
-    #
-    #     for b in range(args.blur, args.blur_max + 1):
-    #         dataloaders_val_blurs[b].dataset.transform = \
-    #             add_blur_transform(dataloaders_val_blurs[b].dataset.transform, b)
-    #
-    # else:
-
-    elif args.blur:
-        # Add blur transform to train & val dataloaders (single blur):
-        data_loader_train.dataset.transform = add_blur_transform(data_loader_train.dataset.transform, args.blur)
+    if args.blur:
+        # Add blur transform to val dataloader:
         data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ For creating Tensorboard log: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    if utils.is_main_process():
-        tb_dir = os.path.join(args.output_dir.replace('out', 'board'),
-                              "{}_epochs/{}".format(args.epochs, args.model_name))
-        print(f'Creating Tensorboard directory: {tb_dir}')
-        writer_tb = SummaryWriter(log_dir=tb_dir)
-
-        if args.blur_max and not args.blur_for_tb_log:
-            args.blur_for_tb_log = args.blur_max
-    else:
-        writer_tb = None
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    mixup_fn = None
-    mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
-    if mixup_active:
-        mixup_fn = Mixup(
-            mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
-            prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
-            label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
     crt_mdl_msg = f"Creating model: {args.model}"
     crt_mdl_msg = crt_mdl_msg + " (with pretrained weights)" if args.load_pretrained else crt_mdl_msg + " (untrained)"
@@ -355,25 +268,6 @@ def main(args):
 
     model.to(device)  # need this for model_ema (so it would be on cuda). Later, add again to move lora layers to cuda.
 
-    # Load trained checkpoint:
-    if args.deit_model_name:
-        deit_model_path = os.path.join('/home/projects/bagon/ilanaveh/code/Transformers/deit', args.deit_model_dir,
-                                   args.deit_model_name)
-
-        deit_checkpoint = torch.load(os.path.join(deit_model_path, 'best_checkpoint.pth'), map_location='cpu')
-
-        # Remove the classification-head weights from deit checkpoint:
-        deit_checkpoint_no_head = {k: v for k, v in deit_checkpoint['model'].items() if not k.startswith('head.')}
-
-        missing, unexpected = model.load_state_dict(deit_checkpoint_no_head, strict=False)
-        assert missing == ['head.weight', 'head.bias']
-        assert unexpected == []
-
-        print(f">> Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}")
-
-        with (output_dir / "log.txt").open("a") as f:
-            f.write(f"Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}" + "\n")
-
     model_ema = None
     if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
@@ -382,9 +276,6 @@ def main(args):
             decay=args.model_ema_decay,
             device='cpu' if args.model_ema_force_cpu else '',
             resume='')
-
-    model_without_ddp = model
-    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     # * --- Add code for LoRA (Based on Liel's 'run_class_finetuning.py', with some changes)
 
@@ -417,265 +308,20 @@ def main(args):
 
     model.to(device)  # add second time, for moving lora params to cuda.
 
-    total_batch_size = args.batch_size * utils.get_world_size()
-    num_training_steps_per_epoch = len(dataset_train) // total_batch_size
-
-    # * --- from Liel (assume use_lora is always True, so remove conditional)
-    # Override or clamp LR to something static and reasonable
-    print("USE NEW PARAM FOR LR")
-    args.lr = 5e-4
-    args.min_lr = 5e-4
-    args.warmup_lr = 5e-4
-    args.weight_decay = 0.00
-    args.warmup_epochs = 0
-    print("LR = %.8f" % args.lr)
-    print(f"Total batch size = {total_batch_size} (batchsize = {args.batch_size}, num workers = {utils.get_world_size()})")
-    print("Number of training examples = %d" % len(dataset_train))
-    print("Number of training steps per epoch = %d" % num_training_steps_per_epoch)
-
-    skip_weight_decay_list = model.no_weight_decay()
-    print("Skip weight decay list: ", skip_weight_decay_list)
-
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
-        model_without_ddp = model.module
-
-    # * --- from Liel (assume use_lora is always True, so remove conditional)
-    # Only get LoRA params
-    lora_params = [p for p in model.parameters() if p.requires_grad]
-
-    # Confirm you found them
-    print(f"[LoRA] Trainable params: {sum(p.numel() for p in lora_params):,}")
-
-    # * --- I didn't take Liel's version (commented below), check if I should...
-    # optimizer = torch.optim.AdamW(lora_params, lr=args.lr, weight_decay=0.00)
-    optimizer = create_optimizer(args, model_without_ddp)
-
-    loss_scaler = NativeScaler()
-
-    lr_scheduler, _ = create_scheduler(args, optimizer)
-
-    # *--- This following part appears both in Liel's code and in deit main_tmp (with minor changes):
-    if mixup_active:
-        # smoothing is handled with mixup label transform
-        criterion = SoftTargetCrossEntropy()
-    elif args.smoothing:
-        criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
-    else:
-        criterion = torch.nn.CrossEntropyLoss()
-
-    # * --- Only in main_tmp, but anyway args.bce_loss is False:
-    if args.bce_loss:
-        criterion = torch.nn.BCEWithLogitsLoss()
-
-    print("criterion = %s" % str(criterion))
-
-    if args.resume:
-        if os.path.isfile(os.path.join(args.resume, args.model_name, 'checkpoint.pth')):
-            resume_ok = True
-            checkpoint = torch.load(os.path.join(args.resume, args.model_name, 'checkpoint.pth'), map_location='cpu')
+    if args.lora_model_name:
+        lora_mdl_pth = os.path.join('/home/projects/bagon/ilanaveh/code/Transformers/deit/LoRA',
+                                    args.lora_model_dir, args.lora_model_name, 'checkpoint.pth')
+        if os.path.isfile(lora_mdl_pth):
+            checkpoint = torch.load(lora_mdl_pth, map_location='cpu')
+            print(f"Loading model: {args.lora_model_name} (epoch: {checkpoint['epoch']})")
+            model.load_state_dict(checkpoint['model'])
         else:
-            resume_ok = False
+            print(f"No such model {args.lora_model_name}")
+            return None
 
-        if resume_ok:
-            model_without_ddp.load_state_dict(checkpoint['model'])
-            if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-                optimizer.load_state_dict(checkpoint['optimizer'])
-                lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-                args.start_epoch = checkpoint['epoch'] + 1
-                if args.model_ema:
-                    utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
-                if 'scaler' in checkpoint:
-                    loss_scaler.load_state_dict(checkpoint['scaler'])
-            lr_scheduler.step(args.start_epoch)
-
-    print(f"Start training for {args.epochs} epochs")
-    start_time = time.time()
-    max_accuracy = 0.0
-
-    if args.start_epoch == 0:
-        # Get test accuracy before training starts:
-        # if args.blur_max:
-        #     test_stats_blurs = {b: evaluate(dataloaders_val_blurs[b], model, device)
-        #                         for b in range(args.blur, args.blur_max)}
-        #
-        #     print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with minimal blur "
-        #           f"({args.blur}): {test_stats_blurs[args.blur]['acc1']:.1f}%")
-        #
-        #     print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
-        #           f"({args.blur_max}): {test_stats_blurs[args.blur_max]['acc1']:.1f}%")
-        #
-        #     max_accuracy = test_stats_blurs[args.blur]["acc1"]
-        #
-        # else:
-        test_stats = evaluate(data_loader_val, model, device)
-        print(f"Epoch 0 - Accuracy of the network on the {len(dataset_val)} test images with blur "
-              f"{args.blur}: {test_stats['acc1']:.1f}%")
-
-        max_accuracy = test_stats["acc1"]
-
-        args.start_epoch = 1
-
-        if writer_tb is not None:
-
-            # if args.blur_max:
-            #     print(f'Writing TB Val, epoch 0, results for input blur: {args.blur_for_tb_log}')
-            #     val_loss_for_tb = test_stats[args.blur_for_tb_log]['loss']
-            #     val_acc1_for_tb = test_stats[args.blur_for_tb_log]['acc1']
-            # else:
-            print('Writing TB Val, epoch 0')
-            val_loss_for_tb = test_stats['loss']
-            val_acc1_for_tb = test_stats['acc1']
-
-            writer_tb.add_scalar('Loss/Val_Loss', val_loss_for_tb, 0)
-            writer_tb.add_scalar('Accuracy/Val_Acc', val_acc1_for_tb, 0)
-
-    for epoch in range(args.start_epoch, args.epochs + 1):
-        if args.distributed:
-            data_loader_train.sampler.set_epoch(epoch)
-
-        # ToDo: check if I need to switch to Liel's version of train_one_epoch (e.g. for dealing with LR scheduler):
-        if args.blur_max:
-            train_stats, applied_blurs_all = train_one_epoch(
-                model, criterion, data_loader_train,
-                optimizer, device, epoch, loss_scaler,
-                args.clip_grad, model_ema, mixup_fn,
-                set_training_mode=args.train_mode,
-                # keep in eval mode for deit finetuning / train mode for training and deit III finetuning
-                args=args
-            )
-        else:
-            train_stats = train_one_epoch(
-                model, criterion, data_loader_train,
-                optimizer, device, epoch, loss_scaler,
-                args.clip_grad, model_ema, mixup_fn,
-                set_training_mode=args.train_mode,
-                # keep in eval mode for deit finetuning / train mode for training and deit III finetuning
-                args=args,
-        )
-
-        lr_scheduler.step(epoch)
-
-        if args.output_dir:
-            checkpoint_paths = [output_dir / 'checkpoint.pth']
-            for checkpoint_path in checkpoint_paths:
-                if model_ema:
-                    utils.save_on_master({
-                        'model': model_without_ddp.state_dict(),
-                        'optimizer': optimizer.state_dict(),
-                        'lr_scheduler': lr_scheduler.state_dict(),
-                        'epoch': epoch,
-                        'model_ema': get_state_dict(model_ema),
-                        'scaler': loss_scaler.state_dict(),
-                        'args': args,
-                    }, checkpoint_path)
-                else:
-                    utils.save_on_master({
-                        'model': model_without_ddp.state_dict(),
-                        'optimizer': optimizer.state_dict(),
-                        'lr_scheduler': lr_scheduler.state_dict(),
-                        'epoch': epoch,
-                        'scaler': loss_scaler.state_dict(),
-                        'args': args,
-                    }, checkpoint_path)
-
-        # if args.blur_max:
-        #     test_stats_blurs = {b: evaluate(dataloaders_val_blurs[b], model, device)
-        #                         for b in range(args.blur, args.blur_max + 1)}
-        #
-        #     print(f"Accuracy of the network on the {len(dataset_val)} test images with minimal blur "
-        #           f"({args.blur}): {test_stats_blurs[args.blur]['acc1']:.1f}%")
-        #
-        #     print(f"Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
-        #           f"({args.blur_max}): {test_stats_blurs[args.blur_max]['acc1']:.1f}%")
-        #
-        #     current_acc = test_stats_blurs[args.blur]["acc1"]
-        #
-        # else:
-        test_stats = evaluate(data_loader_val, model, device)
-
-        print(f"Epoch {epoch} - Accuracy of the network on the {len(dataset_val)} test images with blur "
-              f"{args.blur}: {test_stats['acc1']:.1f}%")
-
-        current_acc = test_stats["acc1"]
-
-        if max_accuracy < current_acc:
-            max_accuracy = current_acc
-            if args.output_dir:
-                checkpoint_paths = [output_dir / 'best_checkpoint.pth']
-                for checkpoint_path in checkpoint_paths:
-                    if model_ema:
-                        utils.save_on_master({
-                            'model': model_without_ddp.state_dict(),
-                            'optimizer': optimizer.state_dict(),
-                            'lr_scheduler': lr_scheduler.state_dict(),
-                            'epoch': epoch,
-                            'model_ema': get_state_dict(model_ema),
-                            'scaler': loss_scaler.state_dict(),
-                            'args': args,
-                        }, checkpoint_path)
-                    else:
-                        utils.save_on_master({
-                            'model': model_without_ddp.state_dict(),
-                            'optimizer': optimizer.state_dict(),
-                            'lr_scheduler': lr_scheduler.state_dict(),
-                            'epoch': epoch,
-                            'scaler': loss_scaler.state_dict(),
-                            'args': args,
-                        }, checkpoint_path)
-
-        print(f'Max accuracy: {max_accuracy:.2f}%')
-
-        # if args.blur_max:
-        #     # Count amount of each blur:
-        #     count_blurs = Counter(applied_blurs_all)
-        #     count_blurs_dict = {b: count_blurs.get(b, 0) for b in range(args.blur_max + 1)}
-        #
-        #     log_stats = {'epoch': epoch,
-        #                  **{f'train_{k}': v for k, v in train_stats.items()},
-        #                  # k1 - blur level (keys in 'test_stats_blurs'); k2 - log metric (acc1, loss, etc.);
-        #                  # v - value of metric; [blur_dict - test_stats for current blur.]
-        #                  **{f'test_blur_{k1}_{k2}': v for k1, blur_dict in test_stats_blurs.items()
-        #                     for k2, v in blur_dict.items()},
-        #                  'n_parameters': n_parameters,
-        #                  **{f'count_blur_{k}': v for k, v in count_blurs_dict.items()}}
-        # else:
-        log_stats = {'epoch': epoch,
-                     **{f'train_{k}': v for k, v in train_stats.items()},
-                     **{f'test_{k}': v for k, v in test_stats.items()},
-                     'n_parameters': n_parameters}
-
-        if args.output_dir and utils.is_main_process():
-            print(f"Saving epoch {epoch} stats to log file at: {output_dir}")
-            with (output_dir / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
-
-            if args.blur_max:
-                with (output_dir / "applied_blurs.txt").open("a") as f:
-                    f.write(f"The blurs applied in epoch {epoch}:\n{json.dumps(applied_blurs_all)}\n\n")
-        else:
-            print("Not saving log.")
-
-        if writer_tb is not None:
-            print('Writing TB Tain, epoch {}'.format(epoch))
-            writer_tb.add_scalar('Loss/Train_Loss', train_stats['loss'], epoch)
-            writer_tb.add_scalar('Accuracy/Train_Acc', train_stats['acc1'], epoch)
-
-            # if args.blur_max:
-            #     print(f'Writing TB Val, epoch {epoch}, results for input blur: {args.blur_for_tb_log}')
-            #     val_loss_for_tb = test_stats[args.blur_for_tb_log]['loss']
-            #     val_acc1_for_tb = test_stats[args.blur_for_tb_log]['acc1']
-            # else:
-            print(f'Writing TB Val, epoch {epoch}')
-            val_loss_for_tb = test_stats['loss']
-            val_acc1_for_tb = test_stats['acc1']
-
-            writer_tb.add_scalar('Loss/Val_Loss', val_loss_for_tb, epoch)
-            writer_tb.add_scalar('Accuracy/Val_Acc', val_acc1_for_tb, epoch)
-
-    total_time = time.time() - start_time
-    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time {}'.format(total_time_str))
+    test_stats = evaluate(data_loader_val, model, device)
+    print(f"Accuracy of the model {args.lora_model_name} on the {len(dataset_val)} test images with blur "
+          f"{args.blur}: {test_stats['acc1']:.1f}%")
 
 
 if __name__ == "__main__":
