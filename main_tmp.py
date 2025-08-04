@@ -148,6 +148,9 @@ def get_args_parser():
     parser.add_argument('--distillation-type', default='none', choices=['none', 'soft', 'hard'], type=str, help="")
     parser.add_argument('--distillation-alpha', default=0.5, type=float, help="")
     parser.add_argument('--distillation-tau', default=1.0, type=float, help="")
+    parser.add_argument('--global-pool', default='avg', type=str,
+                        help="Whether to use average-pooling for teacher model "
+                             "(If CNN - this is necessary. Otherwise-not sure, need to check what happens).")
 
     # * Cosub params
     parser.add_argument('--cosub', action='store_true')
@@ -224,10 +227,16 @@ def main(args):
 
     cudnn.benchmark = True
 
+    if args.distillation_type != 'none':
+        tchr_mdl_name = args.teacher_path.split('/')[-2].replace('_', '-')
+
     args.model_name = args.model_name + '_blur{}'.format(args.blur)
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
+    args.model_name = args.model_name + '_tchr_{}'.format(tchr_mdl_name) \
+        if (args.distillation_type != 'none') else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
+
     output_dir = Path(args.output_dir) / args.model_name
 
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
@@ -430,13 +439,23 @@ def main(args):
             args.teacher_model,
             pretrained=False,
             num_classes=args.nb_classes,
-            global_pool='avg',
+            global_pool=args.global_pool,
         )
         if args.teacher_path.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
                 args.teacher_path, map_location='cpu', check_hash=True)
         else:
             checkpoint = torch.load(args.teacher_path, map_location='cpu')
+
+        # When using a Transformer teacher, if global_pool is set to 'avg', need to create an updated state-dict:
+        if args.teacher_model == 'deit_base_patch16_224' and args.global_pool == 'avg':
+            new_mdl_checkpoint = {}
+            for key, value in checkpoint['model'].items():
+                # Replace "norm." with "fc_norm." in key names
+                new_key = key.replace("norm.", "fc_norm.")
+                new_mdl_checkpoint[new_key] = value
+            checkpoint['model'] = new_mdl_checkpoint
+
         teacher_model.load_state_dict(checkpoint['model'])
         teacher_model.to(device)
         teacher_model.eval()
