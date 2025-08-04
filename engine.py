@@ -49,6 +49,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         # IN 29/10/24: log accuracy before using mixup function:
         with torch.cuda.amp.autocast():
             output = model(samples)
+            # IN 04/08/25: For distillation, a tuple is outputted, so get mean
+            # [based on deit/models/DistilledVisionTransformer > forward (line 59)]
+            if not isinstance(output, torch.Tensor):
+                output = (output[0] + output[1]) / 2
             acc1, acc5 = accuracy(output, targets, topk=(1, 5))
 
         if mixup_fn is not None:
