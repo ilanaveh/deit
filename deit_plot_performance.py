@@ -23,7 +23,7 @@ def get_epoch_acc(log_data, epoch, mdl, test_blur):
                 else:
                     acc1_key = 'test_blur_max_acc1'
                     test_blur_sigma = 32
-            elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl):
+            elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl) or ('deit_blur0-8' in mdl):
                 blur_min = mdl.split('-')[0].split('blur')[1]
                 blur_max = mdl.split('-')[1].split('_')[0]
                 blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
@@ -57,13 +57,15 @@ model_out_dict = {
     'deit_blur0-16_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'deit_blur0-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'deit_blur16-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-8_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'original': 'out',
     'deit_blur4': 'out',
     'deit_blur8': 'out',
     'deit_blur16': 'out',
     'deit_blur32': 'out',
     'deit_blur0-32_tmp': 'out',
-    'deit_blur4_rep': 'out'
+    'deit_blur4_rep': 'out',
+    'deit_blur0_tchr_deit-high-res_hard': osp.join('out', 'distillation_jobs')
 }
 
 # Create a function to get the appropriate color based on model name
@@ -71,6 +73,7 @@ color_map = {
     'blur0-32': 'cyan',
     'blur0-16': 'orange',
     'blur16-32': 'olive',
+    'blur0-8': 'yellow',
     'blur0': 'blue',
     'original': 'blue',
     'blur2': 'green',
@@ -78,12 +81,15 @@ color_map = {
     'blur6': 'black',
     'blur8': 'purple',
     'blur16': 'pink',
-    'blur32': 'brown'
+    'blur32': 'brown',
+    'blur0_tchr_deit-high-res': 'lime'
 
 }
 
 
 def get_color_for_model(model_name):
+    if model_name == 'deit_blur0_tchr_deit-high-res_hard':
+        return color_map['blur0_tchr_deit-high-res']
     for blur_level in color_map.keys():
         if blur_level in model_name:
             return color_map[blur_level]
@@ -115,7 +121,10 @@ def plot_metric(models, metrics, test_blur):
                 epochs = [entry['epoch'] for entry in log_data]
                 if ('deit_blur0-32' in mdl) & (test_blur == 'max'):  # if test_blur is 'min', then default is ok.
                     values = [entry[metric.replace('_', '_blur_max_')] for entry in log_data]
-                elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl) or ('deit_blur0-32_rep' in mdl):
+                elif ('deit_blur0-16' in mdl) \
+                        or ('deit_blur16-32' in mdl) \
+                        or ('deit_blur0-32_rep' in mdl)\
+                        or ('deit_blur0-8' in mdl):
                     blur_min = mdl.split('-')[0].split('blur')[1]
                     blur_max = mdl.split('-')[1].split('_')[0]
                     blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
@@ -126,6 +135,8 @@ def plot_metric(models, metrics, test_blur):
                 plt.plot(epochs, values, linestyle='-', color=color)
                 if 'original' in mdl:
                     blur_level = 'blur0'
+                elif 'tchr' in mdl:
+                    blur_level = mdl.strip('deit_')
                 else:
                     blur_level = next((blur for blur in color_map.keys() if blur in mdl), None)
                 if blur_level and (blur_level not in legend_added):
@@ -145,14 +156,17 @@ def plot_metric(models, metrics, test_blur):
 
 
 def get_gen_mdl_name(strings):
-    """Get general model name (format: blurX or blurX-Y), from a list of model names"""
+    """Get general model name (format: blurX or blurX-Y), from a list of model names with common blur"""
     if not strings:
         return ""
-    prefix = os.path.commonprefix(strings)
+    prefix = os.path.commonprefix(strings)  # the common part in all list items
+
     # Get only the 'blurX' part:
     split_prefix = np.array(prefix.split('_'))
     blur_ind = ['blur' in x for x in split_prefix]
     if any(blur_ind):
+        if 'tchr' in split_prefix:
+            return split_prefix[blur_ind][0] + '_tchr'
         return split_prefix[blur_ind][0]
     else:
         # Get the blur from one of the individual models:
@@ -220,7 +234,7 @@ def plot_bars(models, test_blur):
     train_blurs_for_tbl = [x.split('blur')[1] for x in x_labels]
 
     plt.ylim([0, 100])
-    plt.xlim([-.5, 9.5])
+    plt.xlim([-.5, len(x) - .5])
     plt.ylabel("Top-1 Accuracy")
     plt.xticks([])
     plt.grid(axis='y', zorder=0)
@@ -248,14 +262,16 @@ if __name__ == "__main__":
         'deit_blur0_tmp_new', 'deit_blur2_tmp_new', 'deit_blur4_tmp_new', 'deit_blur6_tmp_new', 'deit_blur6_rep',
         'deit_blur8_rep', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
         'deit_blur0-16_tmp_fix_bug',  # this is instead 'deit_blur0-16_tmp' which stopped before training ended (5/5/25)
-        'deit_blur0-32_tmp_new', 'deit_blur16-32_tmp',
+        'deit_blur0-32_tmp_new', 'deit_blur16-32_tmp', 'deit_blur0-8_tmp',
         # Repetitions of the RandBlur jobs:
         'deit_blur0-16_rep', 'deit_blur16-32_rep',
         # models saved in 'out':
-        'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep'
+        'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep',
+        # models saved in 'distillation_jobs':
+        'deit_blur0_tchr_deit-high-res_hard'
     ]
 
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
-    # plot_bars(models, test_blur='min')
-    plot_metric(models, metric, 'min')
+    plot_bars(models, test_blur='min')
+    plot_metric(models, metric, 'max')
