@@ -234,6 +234,8 @@ def main(args):
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_tchr_{}'.format(tchr_mdl_name) \
         if (args.distillation_type != 'none') else args.model_name
+    args.model_name = args.model_name + '_{}'.format(args.distillation_type) \
+        if (args.distillation_type != 'none') else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
 
@@ -434,7 +436,7 @@ def main(args):
     teacher_model = None
     if args.distillation_type != 'none':
         assert args.teacher_path, 'need to specify teacher-path when using distillation'
-        print(f"Creating teacher model: {args.teacher_model}")
+        print(f"Creating teacher model: {args.teacher_model}, loaded from: {args.teacher_path}")
         teacher_model = create_model(
             args.teacher_model,
             pretrained=False,
@@ -476,6 +478,7 @@ def main(args):
         elif os.path.isfile(os.path.join(args.resume, args.model_name, 'checkpoint.pth')):
             resume_ok = True
             checkpoint = torch.load(os.path.join(args.resume, args.model_name, 'checkpoint.pth'), map_location='cpu')
+            print(f"Continuing from: {os.path.join(args.resume, args.model_name)}, epoch {checkpoint['epoch'] + 1}")
         else:
             resume_ok = False
 
