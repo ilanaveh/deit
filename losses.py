@@ -22,7 +22,7 @@ class DistillationLoss(torch.nn.Module):
         self.alpha = alpha
         self.tau = tau
 
-    def forward(self, inputs, outputs, labels):
+    def forward(self, inputs, outputs, labels, inputs_tchr=None):
         """
         Args:
             inputs: The original inputs that are feed to the teacher model
@@ -30,6 +30,7 @@ class DistillationLoss(torch.nn.Module):
                 either a Tensor, or a Tuple[Tensor, Tensor], with the original output
                 in the first position and the distillation predictions as the second output
             labels: the labels for the base criterion
+            inputs_tchr: add option to get separate sample for teacher - without blur (IN 21/08/25)
         """
         outputs_kd = None
         if not isinstance(outputs, torch.Tensor):
@@ -45,7 +46,11 @@ class DistillationLoss(torch.nn.Module):
                              "class_token and the dist_token")
         # don't backprop throught the teacher
         with torch.no_grad():
-            teacher_outputs = self.teacher_model(inputs)
+            # IN 21/08/25: give teacher model its own input (without blur)
+            if inputs_tchr is not None:
+                teacher_outputs = self.teacher_model(inputs_tchr)
+            else:
+                teacher_outputs = self.teacher_model(inputs)
 
         if self.distillation_type == 'soft':
             T = self.tau

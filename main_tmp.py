@@ -243,7 +243,12 @@ def main(args):
 
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
-    dataset_train, args.nb_classes = build_dataset_blur(is_train=True, args=args, return_blur=bool(args.blur_max))
+    # Build datasets:
+    # Check if a separate sample for teacher is needed (since it should get the high-res image, without blur transform):
+    get_tchr_sample = (args.distillation_type != 'none') and (args.blur or args.blur_max)
+
+    dataset_train, args.nb_classes = build_dataset_blur(is_train=True, args=args, return_blur=bool(args.blur_max),
+                                                        get_tchr_sample=get_tchr_sample)
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
     if args.distributed:

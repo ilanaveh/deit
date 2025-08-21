@@ -4,6 +4,7 @@ import os
 import json
 
 from torchvision import datasets, transforms
+from timm.data.transforms import RandomResizedCropAndInterpolation  # for validating transform_tchr
 from torchvision.datasets.folder import ImageFolder, default_loader
 
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
@@ -68,7 +69,7 @@ class AffectnetDataset(ImageFolder):
         self.class_to_idx = {c: i for (i, c) in enumerate(des_classes)}
 
         # if debugging, build small dataset:
-        self.limit_dataset_size = 10 if debug else None
+        self.limit_dataset_size = 100 if debug else None
 
         super().__init__(root, loader=default_loader, transform=transform, target_transform=target_transform)
 
@@ -275,6 +276,7 @@ def add_blur_transform(ori_transforms, blur, blur_max=None, use_custom_compose=F
 class BlurDataset(ImageFolder):
     """
     Based on original ImageFolder, but return the applied blur level in addition to the image.
+    21/08/25: Add argument "get_tchr_sample", which determines whether to return also high-res image for teacher.
     """
     def __init__(
             self,
@@ -282,24 +284,39 @@ class BlurDataset(ImageFolder):
             transform,
             return_blur,
             chosen_imgs_lst=[],
-            save_imgs_pth=''):
+            save_imgs_pth='',
+            get_tchr_sample=False):
 
         super().__init__(root, transform=transform)
         self.return_blur = return_blur
         self.chosen_imgs_lst = chosen_imgs_lst
         self.save_imgs_pth = save_imgs_pth
+        self.get_tchr_sample = get_tchr_sample
 
-    # Override the __getitem__ method, s.t. the blur level applied for each image is returned:
+    # Override the __getitem__ method, s.t. the blur level applied for each image is returned
+    # (21/08/25: also return high-res image for teacher, if get_tchr_sample).
     def __getitem__(self, index):
 
         # 1. Copy the original ImageFolder getitem method, but add applied_blur as output if GaussianBlurRand is used:
         path, target = self.samples[index]
         sample = self.loader(path)
+        blur_in_transforms = isinstance(self.transform.transforms[0], GaussianBlurRand) or \
+                             isinstance(self.transform.transforms[0], GaussianBlur)
+
+        # Get sample_tchr (without blur transform):
+        if self.get_tchr_sample:
+            # remove blur transform:
+            transform_tchr = transforms.Compose(self.transform.transforms[1:]) if blur_in_transforms else self.transform
+            assert isinstance(transform_tchr.transforms[0], RandomResizedCropAndInterpolation)
+            # apply transforms to sample:
+            sample_tchr = transform_tchr(sample)
+
         if self.transform is not None:
             if self.return_blur:
                 sample, applied_blur = self.transform(sample)
             else:
                 sample = self.transform(sample)
+
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -312,8 +329,7 @@ class BlurDataset(ImageFolder):
                 sample_numpy = np.array(sample_norm.permute(1, 2, 0)).astype('uint8')
                 plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm), sample_numpy)
                 # For creating image with only Blur transform:
-                if isinstance(self.transform.transforms[0], GaussianBlurRand) or \
-                        isinstance(self.transform.transforms[0], GaussianBlur):
+                if blur_in_transforms:
                     sample_for_blur = self.loader(path)
                     if self.return_blur:
                         blur_trans = GaussianBlur(applied_blur)
@@ -324,7 +340,18 @@ class BlurDataset(ImageFolder):
                     plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm.replace('.png', '_onlyBlur.png')),
                                sample_blur_numpy)
 
-        # 2. return blur level, in addition to sample & target.
+                    # also save the image that is passed to teacher, if required.
+                    if self.get_tchr_sample:
+                        sample_tchr_norm = (sample_tchr-sample_tchr.min()) / (sample_tchr.max()-sample_tchr.min()) * 255
+                        sample_tchr_numpy = np.array(sample_tchr_norm.permute(1, 2, 0)).astype('uint8')
+                        plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm.replace('.png', '_tchr.png')),
+                                   sample_tchr_numpy)
+
+        # 2. return blur level, in addition to sample & target
+        #    (21/08/25: also return tchr_sample if required).
+        if self.get_tchr_sample:
+            sample = {'student': sample, 'teacher': sample_tchr}
+
         if self.return_blur:
             return sample, target, applied_blur
         else:
@@ -395,9 +422,10 @@ class BlurAffectnetDataset(AffectnetDataset):
             return sample, target
 
 
-def build_dataset_blur(is_train, args, return_blur=False):
+def build_dataset_blur(is_train, args, return_blur=False, get_tchr_sample=False):
     """
     based on 'build_dataset', but calls BlurDataset instead of ImageFolder.
+    21/08/25: Add argument "get_tchr_sample", which determines whether to return also high-res image for teacher.
     """
     transform = build_transform(is_train, args)
 
@@ -413,7 +441,8 @@ def build_dataset_blur(is_train, args, return_blur=False):
         else:
             chosen_imgs_lst = []
         dataset = BlurDataset(root, transform=transform, return_blur=return_blur, chosen_imgs_lst=chosen_imgs_lst,
-                              save_imgs_pth=os.path.join(args.output_dir, args.model_name))
+                              save_imgs_pth=os.path.join(args.output_dir, args.model_name),
+                              get_tchr_sample=get_tchr_sample)
         nb_classes = 1000
 
     elif args.data_set == "Affectnet":
