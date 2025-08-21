@@ -58,6 +58,7 @@ model_out_dict = {
     'deit_blur0-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'deit_blur16-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'deit_blur0-8_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-8_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'original': 'out',
     'deit_blur4': 'out',
     'deit_blur8': 'out',
@@ -65,31 +66,42 @@ model_out_dict = {
     'deit_blur32': 'out',
     'deit_blur0-32_tmp': 'out',
     'deit_blur4_rep': 'out',
-    'deit_blur0_tchr_deit-high-res_hard': osp.join('out', 'distillation_jobs')
+    'deit_blur0_tchr_deit-high-res_hard': osp.join('out', 'distillation_jobs'),
+    'deit_blur0_tchr_RegNetY-160_hard': osp.join('out', 'distillation_jobs'),
+    'deit_blur0-8_tchr_RegNetY-160_hard': osp.join('out', 'distillation_jobs'),
+    'deit_blur0-16_tchr_deit-high-res_hard': osp.join('out', 'distillation_jobs'),
+    'deit_blur0-16_tchr_RegNetY-160_hard': osp.join('out', 'distillation_jobs'),
+    'deit_blur16_tchr_RegNetY-160_hard': osp.join('out', 'distillation_jobs'),
+    'deit_blur16_tchr_RegNetY-160_hard_rep': osp.join('out', 'distillation_jobs')
 }
 
 # Create a function to get the appropriate color based on model name
 color_map = {
-    'blur0-32': 'cyan',
-    'blur0-16': 'orange',
+    'blur0-32': 'green',
+    'blur0-16': 'magenta',
     'blur16-32': 'olive',
-    'blur0-8': 'yellow',
-    'blur0': 'blue',
-    'original': 'blue',
+    'blur0-8': 'orange',
+    'blur0': 'cyan',
+    'original': 'cyan',
     'blur2': 'green',
     'blur4': 'red',
     'blur6': 'black',
-    'blur8': 'purple',
+    'blur8': 'gold',
     'blur16': 'pink',
-    'blur32': 'brown',
-    'blur0_tchr_deit-high-res': 'lime'
-
+    'blur32': 'limegreen',
+    'blur0_tchr_deit-high-res': 'blue',
+    'blur0_tchr_RegNetY-160': 'blue',
+    'blur0-8_tchr_RegNetY-160': 'darkgoldenrod',
+    'blur0-16_tchr_deit-high-res': 'red',
+    'blur0-16_tchr_RegNetY-160': 'red',
+    'blur16_tchr_RegNetY-160': 'purple'
 }
+# More colors I can add: 'teal', 'navy', 'gold', 'coral', 'indigo', 'turquoise'
 
 
 def get_color_for_model(model_name):
-    if model_name == 'deit_blur0_tchr_deit-high-res_hard':
-        return color_map['blur0_tchr_deit-high-res']
+    if 'tchr' in model_name:
+        return color_map[model_name.replace('deit_', '').replace('_hard', '').replace('_rep', '')]
     for blur_level in color_map.keys():
         if blur_level in model_name:
             return color_map[blur_level]
@@ -244,7 +256,8 @@ def plot_bars(models, test_blur):
                           rowLabels=['Train Blur', 'Test Blur'],
                           colLabels=['' for x in train_blurs_for_tbl],
                           loc='bottom',
-                          cellLoc='center')
+                          cellLoc='center',
+                          fontsize=20)
 
     # Adjust layout to make room for the table:
     plt.subplots_adjust(left=0.2, bottom=0.2)
@@ -264,14 +277,27 @@ if __name__ == "__main__":
         'deit_blur0-16_tmp_fix_bug',  # this is instead 'deit_blur0-16_tmp' which stopped before training ended (5/5/25)
         'deit_blur0-32_tmp_new', 'deit_blur16-32_tmp', 'deit_blur0-8_tmp',
         # Repetitions of the RandBlur jobs:
-        'deit_blur0-16_rep', 'deit_blur16-32_rep',
+        'deit_blur0-16_rep', 'deit_blur16-32_rep', 'deit_blur0-8_rep',
         # models saved in 'out':
         'original', 'deit_blur4', 'deit_blur8', 'deit_blur16', 'deit_blur32', 'deit_blur0-32_tmp', 'deit_blur4_rep',
         # models saved in 'distillation_jobs':
-        'deit_blur0_tchr_deit-high-res_hard'
+        'deit_blur0_tchr_deit-high-res_hard', 'deit_blur0-16_tchr_deit-high-res_hard',
+        'deit_blur0_tchr_RegNetY-160_hard', 'deit_blur0-16_tchr_RegNetY-160_hard'
+    ]
+
+    models_cleaner_fig = [
+        'deit_blur0_tmp_new', 'original', 'deit_blur0_tchr_RegNetY-160_hard',
+        'deit_blur8', 'deit_blur8_rep',
+        'deit_blur0-8_tmp', 'deit_blur0-8_rep',
+        'deit_blur16', 'deit_blur16_tmp_new',
+        'deit_blur16_tchr_RegNetY-160_hard',  'deit_blur16_tchr_RegNetY-160_hard_rep',
+        'deit_blur0-16_tmp_fix_bug', 'deit_blur0-16_rep', 'deit_blur0-16_tchr_RegNetY-160_hard',
+        'deit_blur32', 'deit_blur32_tmp_new',
+        'deit_blur0-32_tmp', 'deit_blur0-32_tmp_new',
+
     ]
 
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
-    plot_bars(models, test_blur='min')
-    plot_metric(models, metric, 'max')
+    # plot_bars(models, test_blur='min')
+    plot_metric(models_cleaner_fig, metric, 'max')
