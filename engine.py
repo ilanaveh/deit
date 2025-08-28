@@ -45,9 +45,12 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
         # IN 21/08/25: add option to get separate sample for teacher (without blur - implemented in BlurDataset):
         if isinstance(samples, dict):
+            sep_smpl_tchr = True
             samples_tchr = samples['teacher']
             samples_tchr = samples_tchr.to(device, non_blocking=True)
             samples = samples['student']
+        else:
+            sep_smpl_tchr = False
 
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
@@ -74,7 +77,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             outputs = model(samples)
             if not args.cosub:
                 if isinstance(criterion, DistillationLoss):
-                    loss = criterion(samples, outputs, targets, inputs_tchr=samples_tchr)
+                    if sep_smpl_tchr:
+                        loss = criterion(samples, outputs, targets, inputs_tchr=samples_tchr)
+                    else:
+                        loss = criterion(samples, outputs, targets)
                 else:
                     loss = criterion(outputs, targets)
             else:
