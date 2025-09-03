@@ -463,7 +463,10 @@ def main(args):
                 new_mdl_checkpoint[new_key] = value
             checkpoint['model'] = new_mdl_checkpoint
 
-        teacher_model.load_state_dict(checkpoint['model'])
+        if 'model' in checkpoint:
+            teacher_model.load_state_dict(checkpoint['model'])
+        else:
+            teacher_model.load_state_dict(checkpoint['state_dict'])  # relevant to my trained resnet models.
         teacher_model.to(device)
         teacher_model.eval()
 
