@@ -14,6 +14,8 @@ from PIL import ImageFilter  # for GaussianBlur
 import random  # for GaussianBlurRand
 import matplotlib.pyplot as plt  # for saving example images.
 import numpy as np  # for saving example images.
+import torch  # for setting seed
+
 
 class INatDataset(ImageFolder):
     def __init__(self, root, train=True, year=2018, transform=None, target_transform=None,
@@ -296,6 +298,7 @@ class BlurDataset(ImageFolder):
     # Override the __getitem__ method, s.t. the blur level applied for each image is returned
     # (21/08/25: also return high-res image for teacher, if get_tchr_sample).
     def __getitem__(self, index):
+        seed = torch.randint(0, 1000000, (1,)).item()
 
         # 1. Copy the original ImageFolder getitem method, but add applied_blur as output if GaussianBlurRand is used:
         path, target = self.samples[index]
@@ -308,13 +311,16 @@ class BlurDataset(ImageFolder):
             # remove blur transform:
             transform_tchr = transforms.Compose(self.transform.transforms[1:]) if blur_in_transforms else self.transform
             assert isinstance(transform_tchr.transforms[0], RandomResizedCropAndInterpolation)
+            # Set seed, so teacher and student samples would go through same transforms:
+            set_seed(seed)
             # apply transforms to sample:
             sample_tchr = transform_tchr(sample)
 
         if self.transform is not None:
             if self.return_blur:
-                sample, applied_blur = self.transform(sample)
+                sample, applied_blur = self.transform(sample, seed)
             else:
+                set_seed(seed)
                 sample = self.transform(sample)
 
         if self.target_transform is not None:
@@ -470,10 +476,13 @@ class CustomCompose:
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, img):
+    def __call__(self, img, seed=None):
         for t in self.transforms:
             if isinstance(t, GaussianBlurRand):
                 img, applied_blur = t(img, return_blur=True)
+                if seed:
+                    # Set seed manually after random blur, so that the rest of the transforms are the same as teacher:
+                    set_seed(seed)
             else:
                 img = t(img)
 
@@ -490,3 +499,14 @@ class CustomCompose:
         format_string += "\n)"
         return format_string
 
+
+def set_seed(seed):
+    """Sets seeds for all relevant random number generators."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
