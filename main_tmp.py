@@ -145,6 +145,8 @@ def get_args_parser():
     parser.add_argument('--teacher-model', default='regnety_160', type=str, metavar='MODEL',
                         help='Name of teacher model to train (default: "regnety_160"')
     parser.add_argument('--teacher-path', type=str, default='')
+    parser.add_argument('--teacher-blur', type=str, default='high_res',
+                        help="'high_res' or 'same' (for same blur as student)")
     parser.add_argument('--distillation-type', default='none', choices=['none', 'soft', 'hard'], type=str, help="")
     parser.add_argument('--distillation-alpha', default=0.5, type=float, help="")
     parser.add_argument('--distillation-tau', default=1.0, type=float, help="")
@@ -245,7 +247,14 @@ def main(args):
 
     # Build datasets:
     # Check if a separate sample for teacher is needed (since it should get the high-res image, without blur transform):
-    get_tchr_sample = (args.distillation_type != 'none') and (args.blur or args.blur_max)
+    get_tchr_sample = (args.distillation_type != 'none') and \
+                      (args.blur or args.blur_max) and \
+                      (args.teacher_blur == 'high_res')
+
+    if get_tchr_sample:
+        print("Teacher gets high-res inputs.")
+    else:
+        print(f"Teacher gets same inputs as student (blur: {args.blur}).")
 
     dataset_train, args.nb_classes = build_dataset_blur(is_train=True, args=args, return_blur=bool(args.blur_max),
                                                         get_tchr_sample=get_tchr_sample)
