@@ -23,6 +23,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     set_training_mode=True, args = None):
+    # IN 9/9/25: add cosine_sim for lora feature consistency loss:
+    cosine_sim = torch.nn.CosineSimilarity(dim=-1)
+
     model.train(set_training_mode)
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -74,7 +77,12 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             targets = targets.gt(0.0).type(targets.dtype)
          
         with torch.cuda.amp.autocast():
-            outputs = model(samples)
+            if sep_smpl_tchr and not isinstance(criterion, DistillationLoss):
+                # 9/9/25: LoRA with feature consistency
+                outputs_high, feats_high = model(samples_tchr, return_features=True)
+                outputs_blur, feats_blur = model(samples, return_features=True)
+            else:
+                outputs = model(samples)
             if not args.cosub:
                 if isinstance(criterion, DistillationLoss):
                     if sep_smpl_tchr:
@@ -82,7 +90,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     else:
                         loss = criterion(samples, outputs, targets)
                 else:
-                    loss = criterion(outputs, targets)
+                    if sep_smpl_tchr:
+                        # 9/9/25: LoRA with feature consistency
+                        loss_cls = criterion(outputs_blur, targets)  # Main loss: classify from blurred inputs
+                        loss_feat = 1 - cosine_sim(feats_high, feats_blur).mean()  # Consistency loss on CLS tokens
+                        loss = loss_cls + args.feat_const_lamda * loss_feat  # λ = 0.2, tune between 0.1–0.5
+                    else:
+                        loss = criterion(outputs, targets)
             else:
                 outputs = torch.split(outputs, outputs.shape[0]//2, dim=0)
                 loss = 0.25 * criterion(outputs[0], targets) 
