@@ -28,6 +28,7 @@ from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.scheduler import create_scheduler
 from deit.datasets import build_dataset, add_blur_transform, build_dataset_blur
 from Code_from_Liel.modeling_finetune import inject_lora_vit
+# from modify_lora_functions import inject_lora_vit
 import loralib as lora
 import time
 from deit.engine import train_one_epoch, evaluate
@@ -35,6 +36,8 @@ import json
 import datetime
 from tensorboardX import SummaryWriter
 from collections import Counter
+from module_wrappers import forward_with_features
+from types import MethodType
 
 
 def get_args_parser():
@@ -217,6 +220,10 @@ def get_args_parser():
                         default='/home/projects/bagon/ilanaveh/code/Transformers/deit/ims2save_for_logging/ims2save.txt',
                         type=str, help='path to text file with list of images to save as examples from each run.')
 
+    # parameters for feature-consistency loss:
+    parser.add_argument('--use_feat_const_loss', default=False, type=bool)
+    parser.add_argument('--feat_const_lamda', default=.2, type=float, help='tune between 0.1–0.5')
+
     # suffix for model name
     parser.add_argument('--suf', default='', type=str, help='suffix for model name (would be added with "_"')
     return parser
@@ -257,7 +264,8 @@ def main(args):
 
     print(f"Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
     print("Train Dataset:")
-    dataset_train, args.nb_classes = build_dataset_blur(is_train=True, args=args, return_blur=bool(args.blur_max))
+    dataset_train, args.nb_classes = build_dataset_blur(is_train=True, args=args, return_blur=bool(args.blur_max),
+                                                        get_tchr_sample=args.use_feat_const_loss)
     print("Validation Dataset:")
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
@@ -360,6 +368,13 @@ def main(args):
     )
 
     model.to(device)  # need this for model_ema (so it would be on cuda). Later, add again to move lora layers to cuda.
+
+    # 9/9/25 Add for feature consistency:
+    if args.use_feat_const_loss:
+        # Save the original forward:
+        model._forward_original = model.forward
+        # Apply new forward (for returning features):
+        model.forward = MethodType(forward_with_features, model)
 
     # Load trained checkpoint:
     if args.deit_model_name:
@@ -663,7 +678,7 @@ def main(args):
             print("Not saving log.")
 
         if writer_tb is not None:
-            print('Writing TB Tain, epoch {}'.format(epoch))
+            print('Writing TB Train, epoch {}'.format(epoch))
             writer_tb.add_scalar('Loss/Train_Loss', train_stats['loss'], epoch)
             writer_tb.add_scalar('Accuracy/Train_Acc', train_stats['acc1'], epoch)
 
