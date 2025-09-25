@@ -253,6 +253,8 @@ def main(args):
 
     if get_tchr_sample:
         print("Teacher gets high-res inputs.")
+    elif args.distillation_type == 'none':
+        print("No Distillation.")
     else:
         print(f"Teacher gets same inputs as student (blur: {args.blur}).")
 
