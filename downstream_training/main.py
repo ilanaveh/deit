@@ -173,7 +173,7 @@ def get_args_parser():
     parser.add_argument('--desired_classes', default=[0, 1, 2, 3, 4, 5, 6, 7], type=int, nargs='+',
                         help='0: Neutral, 1: Happiness, 2: Sadness, 3: Surprise, 4: Fear, 5: Disgust, 6: Anger, '
                              '7: Contempt, 8: None, 9: Uncertain, 10: No-Face.ToDo: decide which classes I want.')
-    parser.add_argument('--balance_clss', default=True, type=bool,
+    parser.add_argument('--balance_clss', action='store_true',
                         help='whether to take the same number of images from each class (relevant for Affectnet)')
     parser.add_argument('--inat-category', default='name',
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
@@ -252,6 +252,7 @@ def main(args):
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
+    args.model_name = args.model_name + '_unbalanced' if not args.balance_clss else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     print(f"Model name: {args.model_name}")
 
