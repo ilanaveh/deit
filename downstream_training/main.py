@@ -229,6 +229,7 @@ def main(args):
     print(args)
 
     device = torch.device(args.device)
+    args.debug = torch.cuda.device_count() == 1
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
