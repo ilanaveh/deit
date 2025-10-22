@@ -1,12 +1,18 @@
 """
 22/10/25
 Downstream training of deit model on Affectnet.
-Based on deit/main.py
+Based on deit/main_tmp.py
+
+Changes:
+    - Dataset: Affectnet
 """
 
 
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
+import sys
+sys.path.append("/home/projects/bagon/ilanaveh/code/Transformers")
+
 import argparse
 import datetime
 import numpy as np
@@ -31,10 +37,10 @@ from deit.samplers import RASampler
 from deit.augment import new_data_aug_generator
 from deit.datasets import add_blur_transform
 
-import models
-import models_v2
+import deit.models
+import deit.models_v2
 
-import utils
+import deit.utils as utils
 import os
 
 
@@ -49,6 +55,12 @@ def get_args_parser():
     parser.add_argument('--model', default='deit_base_patch16_224', type=str, metavar='MODEL',
                         help='Name of model to train')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
+
+    parser.add_argument('--load_pretrained', action='store_true', help='whether to load pretrained deit model.')
+
+    parser.add_argument('--deit_model_dir', default='out', type=str, help='directory (within "deit") of deit model')
+    parser.add_argument('--deit_model_name', default=None, type=str,
+                        help='model name, or None for original (pretrained or not, according to args.load_pretrained)')
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
                         help='Dropout rate (default: 0.)')
@@ -163,23 +175,30 @@ def get_args_parser():
     parser.add_argument('--attn-only', action='store_true')
 
     # Dataset parameters
-    parser.add_argument('--data-path', default='/home/projects/bagon/shared/imagenet', type=str,
+    parser.add_argument('--data-path', default='/home/projects/bagon/ilanaveh/data/AffectNet', type=str,
                         help='dataset path')
-    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19'],
+    parser.add_argument('--data-set', default='Affectnet', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19', 'Affectnet'],
                         type=str, help='Image Net dataset path')
+    parser.add_argument('--desired_classes', default=[0, 1, 2, 3, 4, 5, 6, 7], type=int, nargs='+',
+                        help='0: Neutral, 1: Happiness, 2: Sadness, 3: Surprise, 4: Fear, 5: Disgust, 6: Anger, '
+                             '7: Contempt, 8: None, 9: Uncertain, 10: No-Face.ToDo: decide which classes I want.')
+    parser.add_argument('--balance_clss', default=True, type=bool,
+                        help='whether to take the same number of images from each class (relevant for Affectnet)')
     parser.add_argument('--inat-category', default='name',
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
                         type=str, help='semantic granularity')
 
-    parser.add_argument('--output_dir', default='/home/projects/bagon/ilanaveh/code/Transformers/deit/out',
+    parser.add_argument('--output_dir',
+                        default='/home/projects/bagon/ilanaveh/code/Transformers/deit/downstream_training/out',
                         help='path where to save, empty for no saving')
-    parser.add_argument('--model_name', default='deit',
+    parser.add_argument('--model_name', default='deit_downstream',
                         help='sub-directory for saving checkpoint')
 
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
-    parser.add_argument('--resume', default='/home/projects/bagon/ilanaveh/code/Transformers/deit/out',
+    parser.add_argument('--resume',
+                        default='/home/projects/bagon/ilanaveh/code/Transformers/deit/downstream_training/out',
                         help='resume from checkpoint')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
@@ -227,11 +246,34 @@ def main(args):
     seed = args.seed + utils.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
-    # random.seed(seed)
 
     cudnn.benchmark = True
 
+    n_cls = len(args.desired_classes)
+
+    # Change model name to format:
+    #   "finetune_deit_model_blur{deit_model_training_blur}_affectnet_blur{affectnet_training_blur}_{suf}"
+    # If starting from original pretrained deit (i.e. args.deit_model_name=None):
+    #   "finetune_deit_model_original_affectnet_blur{affectnet_training_blur}_{suf}"
+    # * If using more than 2 classes from affectnet, add "_{n}cls" before suf.
+    deit_model_blur = args.deit_model_name.split('blur')[1].split('_')[0] if args.deit_model_name else ''
+    args.model_name = f"finetune_deit_model_blur{deit_model_blur}" \
+        if args.deit_model_name else "finetune_deit_model_original"
+    args.model_name = args.model_name + '_affectnet_blur{}'.format(args.blur)
+    args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
+    args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
+    args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
+    args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
+    print(f"Model name: {args.model_name}")
+
+    output_dir = Path(args.output_dir) / args.model_name
+    output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
+
+    print(f"Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
+    print("Train Dataset:")
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
+
+    print("Validation Dataset:")
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
     if args.distributed:
@@ -303,7 +345,10 @@ def main(args):
             prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
-    print(f"Creating model: {args.model}")
+    crt_mdl_msg = f"Creating model: {args.model}"
+    crt_mdl_msg = crt_mdl_msg + " (with pretrained weights)" if args.load_pretrained else crt_mdl_msg + " (untrained)"
+    print(crt_mdl_msg)
+
     model = create_model(
         args.model,
         pretrained=False,
@@ -374,6 +419,25 @@ def main(args):
 
     model.to(device)
 
+    # Load trained checkpoint:
+    if args.deit_model_name:
+        deit_model_path = os.path.join('/home/projects/bagon/ilanaveh/code/Transformers/deit', args.deit_model_dir,
+                                       args.deit_model_name)
+
+        deit_checkpoint = torch.load(os.path.join(deit_model_path, 'best_checkpoint.pth'), map_location='cpu')
+
+        # Remove the classification-head weights from deit checkpoint:
+        deit_checkpoint_no_head = {k: v for k, v in deit_checkpoint['model'].items() if not k.startswith('head.')}
+
+        missing, unexpected = model.load_state_dict(deit_checkpoint_no_head, strict=False)
+        assert missing == ['head.weight', 'head.bias']
+        assert unexpected == []
+
+        print(f">> Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}")
+
+        with (output_dir / "log.txt").open("a") as f:
+            f.write(f"Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}" + "\n")
+
     model_ema = None
     if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
@@ -434,16 +498,6 @@ def main(args):
     criterion = DistillationLoss(
         criterion, teacher_model, args.distillation_type, args.distillation_alpha, args.distillation_tau
     )
-
-    args.model_name = args.model_name + '_blur{}'.format(args.blur)
-    args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
-    args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
-    args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
-    output_dir = Path(args.output_dir) / args.model_name
-
-    output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
-
-    print("\n~~~ {} ~~~\n".format(args.model_name))
 
     if args.resume:
         if args.resume.startswith('https'):
