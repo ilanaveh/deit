@@ -42,6 +42,7 @@ import deit.models_v2
 
 import deit.utils as utils
 import os
+from tensorboardX import SummaryWriter
 
 
 def get_args_parser():
@@ -250,11 +251,11 @@ def main(args):
         if args.deit_model_name else "finetune_deit_model_original"
     args.model_name = args.model_name + '_affectnet_blur{}'.format(args.blur)
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
-    args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
     args.model_name = args.model_name + '_unbalanced' if not args.balance_clss else args.model_name
+    args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
-    print(f"Model name: {args.model_name}")
+    print(f"\n~~~\n{args.model_name}\n~~~\n")
 
     output_dir = Path(args.output_dir) / args.model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
@@ -326,6 +327,19 @@ def main(args):
 
         data_loader_val_blur_max.dataset.transform = \
             add_blur_transform(data_loader_val_blur_max.dataset.transform, args.blur_max)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ For creating Tensorboard log: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    if utils.is_main_process():
+        tb_dir = os.path.join(args.output_dir.replace('out', 'board'),
+                              "{}_epochs/{}_classes/{}".format(args.epochs, n_cls, args.model_name))
+        print(f'Creating Tensorboard directory: {tb_dir}')
+        writer_tb = SummaryWriter(log_dir=tb_dir)
+
+        if args.blur_max and not args.blur_for_tb_log:
+            args.blur_for_tb_log = args.blur_max
+    else:
+        writer_tb = None
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -530,6 +544,18 @@ def main(args):
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
+
+        if writer_tb is not None:
+            print('Writing TB Train, epoch {}'.format(epoch))
+            writer_tb.add_scalar('Loss/Train_Loss', train_stats['loss'], epoch)
+            writer_tb.add_scalar('Accuracy/Train_Acc', train_stats['acc1'], epoch)
+
+            print(f'Writing TB Val, epoch {epoch}')
+            val_loss_for_tb = test_stats['loss']
+            val_acc1_for_tb = test_stats['acc1']
+
+            writer_tb.add_scalar('Loss/Val_Loss', val_loss_for_tb, epoch)
+            writer_tb.add_scalar('Accuracy/Val_Acc', val_acc1_for_tb, epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
