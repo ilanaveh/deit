@@ -213,6 +213,9 @@ def get_args_parser():
     # blur parameter
     parser.add_argument('--blur', default=0, type=int, help='Sigma of the Gaussian blur')
     parser.add_argument('--blur_max', default=None, type=int, help='For Variable-Blur training: max sigma')
+    parser.add_argument('--blur_for_tb_log', default=None, type=int,
+                        help='For Variable-Blur training: blur to show in TB logging (validation). '
+                             'Default (if None): blur_max')
 
     # suffix for model name
     parser.add_argument('--suf', default='', type=str, help='suffix for model name (would be added with "_"')
@@ -255,12 +258,12 @@ def main(args):
     args.model_name = args.model_name + '_unbalanced' if not args.balance_clss else args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
-    print(f"\n~~~\n{args.model_name}\n~~~\n")
+    print(f"~~~\n{args.model_name}\n~~~")
 
     output_dir = Path(args.output_dir) / args.model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
-    print(f"Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
+    print(f"=> Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
     print("Train Dataset:")
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
 
@@ -333,7 +336,7 @@ def main(args):
     if utils.is_main_process():
         tb_dir = os.path.join(args.output_dir.replace('out', 'board'),
                               "{}_epochs/{}_classes/{}".format(args.epochs, n_cls, args.model_name))
-        print(f'Creating Tensorboard directory: {tb_dir}')
+        print(f'=> Creating Tensorboard directory: {tb_dir}')
         writer_tb = SummaryWriter(log_dir=tb_dir)
 
         if args.blur_max and not args.blur_for_tb_log:
@@ -349,7 +352,7 @@ def main(args):
             prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
-    crt_mdl_msg = f"Creating model: {args.model}"
+    crt_mdl_msg = f"=> Creating model: {args.model}"
     crt_mdl_msg = crt_mdl_msg + " (with pretrained weights)" if args.load_pretrained else crt_mdl_msg + " (untrained)"
     print(crt_mdl_msg)
 
@@ -401,7 +404,7 @@ def main(args):
         assert missing == ['head.weight', 'head.bias']
         assert unexpected == []
 
-        print(f">> Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}")
+        print(f"=> Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}")
 
         with (output_dir / "log.txt").open("a") as f:
             f.write(f"Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}" + "\n")
