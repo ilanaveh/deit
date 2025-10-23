@@ -15,6 +15,7 @@ import random  # for GaussianBlurRand
 import matplotlib.pyplot as plt  # for saving example images.
 import numpy as np  # for saving example images.
 import torch  # for setting seed
+from collections import Counter
 
 
 class INatDataset(ImageFolder):
@@ -99,6 +100,7 @@ class AffectnetDataset(ImageFolder):
         images = []
 
         # Walk through images and annotations
+        print_done = 0
         for (i, img) in enumerate(os.listdir(images_path)):
             im_id = img.split('.')[0]  # remove '.jpg'
             if img.lower().endswith(extensions):
@@ -113,7 +115,12 @@ class AffectnetDataset(ImageFolder):
                             if np.all([v >= target_num for v in track_num_ims_each_clss.values()]):
                                 for ann, v in track_num_ims_each_clss.items():
                                     print(f"Number of images from class {ann}: {v}")
+                                    print_done = 1
                                 break
+        if not print_done:
+            cnt_anns = Counter([im[1] for im in images])
+            for ann, v in sorted(cnt_anns.items()):
+                print(f"Number of images from class {ann}: {v}")
 
         return images
 
