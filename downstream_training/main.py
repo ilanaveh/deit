@@ -132,8 +132,6 @@ def get_args_parser():
     parser.add_argument('--no-train-mode', action='store_false', dest='train_mode')
     parser.set_defaults(train_mode=True)
 
-    parser.add_argument('--ThreeAugment', action='store_true')  # 3augment
-
     parser.add_argument('--src', action='store_true')  # simple random crop
 
     # * Random Erase params
@@ -301,8 +299,6 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=True,
     )
-    if args.ThreeAugment:
-        data_loader_train.dataset.transform = new_data_aug_generator(args)
 
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
