@@ -213,7 +213,8 @@ def get_args_parser():
     parser.add_argument('--blur_max', default=None, type=int, help='For Variable-Blur training: max sigma')
     parser.add_argument('--blur_for_tb_log', default=None, type=int,
                         help='For Variable-Blur training: blur to show in TB logging (validation). '
-                             'Default (if None): blur_max')
+                             'Default (if None): blur_max. '
+                             'Currently only works with blur / blur_max (not other blurs in range)')
 
     # suffix for model name
     parser.add_argument('--suf', default='', type=str, help='suffix for model name (would be added with "_"')
@@ -310,7 +311,7 @@ def main(args):
 
     if args.blur or args.blur_max:  # if blur > 0 or blur_max was given (and then transform is added even for blur=0).
         data_loader_train.dataset.transform = \
-            add_blur_transform(data_loader_train.dataset.transform, args.blur, args.blur_max)
+            add_blur_transform(data_loader_train.dataset.transform, args.blur, blur_max=args.blur_max)
         data_loader_val.dataset.transform = add_blur_transform(data_loader_val.dataset.transform, args.blur)
 
     if args.blur_max:
@@ -568,8 +569,24 @@ def main(args):
             writer_tb.add_scalar('Accuracy/Train_Acc', train_stats['acc1'], epoch)
 
             print(f'Writing TB Val, epoch {epoch}')
-            val_loss_for_tb = test_stats['loss']
-            val_acc1_for_tb = test_stats['acc1']
+            if args.blur_max:
+                if args.blur_for_tb_log == args.blur:
+                    print(f"Logging performance for minimal blur in range: {args.blur_for_tb_log}")
+                    val_loss_for_tb = test_stats['loss']
+                    val_acc1_for_tb = test_stats['acc1']
+                elif args.blur_for_tb_log == args.blur_max:
+                    print(f"Logging performance for maximal blur in range: {args.blur_for_tb_log}")
+                    val_loss_for_tb = test_stats_blur_max['loss']
+                    val_acc1_for_tb = test_stats_blur_max['acc1']
+                else:
+                    print(f"args.blur_for_tb_log should be equal to args.blur ({args.blur}) or args.blur_max ("
+                          f"{args.blur_max}), but got {args.blur_for_tb_log} => not logging.")
+                    val_loss_for_tb = None
+                    val_acc1_for_tb = None
+            else:
+                print(f"Logging performance for blur {args.blur}")
+                val_loss_for_tb = test_stats['loss']
+                val_acc1_for_tb = test_stats['acc1']
 
             writer_tb.add_scalar('Loss/Val_Loss', val_loss_for_tb, epoch)
             writer_tb.add_scalar('Accuracy/Val_Acc', val_acc1_for_tb, epoch)
