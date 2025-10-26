@@ -450,6 +450,7 @@ def main(args):
         elif os.path.isfile(os.path.join(args.resume, args.model_name, 'checkpoint.pth')):
             resume_ok = True
             checkpoint = torch.load(os.path.join(args.resume, args.model_name, 'checkpoint.pth'), map_location='cpu')
+            print(f"Continuing from: {os.path.join(args.resume, args.model_name)}, epoch {checkpoint['epoch'] + 1}")
         else:
             resume_ok = False
 
