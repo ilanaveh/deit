@@ -1,7 +1,7 @@
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
 """
-Train and eval functions used in main.py
+Train and eval functions used in main_downstream.py
 """
 import math
 import sys
@@ -16,7 +16,7 @@ from timm.utils import accuracy, ModelEma
 
 from losses import DistillationLoss
 import utils
-
+import numpy as np
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -139,7 +139,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device):
+def evaluate(data_loader, model, device, return_breakdown=False, des_classes=None):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -147,6 +147,14 @@ def evaluate(data_loader, model, device):
 
     # switch to evaluation mode
     model.eval()
+
+    # Create empty breakdown dict, for adding each batch's breakdown to:
+    if return_breakdown:
+        if not des_classes:
+            print("Classes not given --> not returning breakdown")
+            return_breakdown = False
+        else:
+            breakdown = {c_tar: {c_pred: 0 for c_pred in des_classes} for c_tar in des_classes}
 
     for images, target in metric_logger.log_every(data_loader, 10, header):
         images = images.to(device, non_blocking=True)
@@ -156,8 +164,12 @@ def evaluate(data_loader, model, device):
         with torch.cuda.amp.autocast():
             output = model(images)
             loss = criterion(output, target)
-
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        if return_breakdown:
+            acc_list, breakdown = accuracy_with_class_breakdown(output, target, topk=(1, 5), return_breakdown=True,
+                                                                prev_breakdown=breakdown)
+            acc1, acc5 = acc_list
+        else:
+            acc1, acc5 = accuracy(output, target, topk=(1, 5))
 
         batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
@@ -168,4 +180,30 @@ def evaluate(data_loader, model, device):
     print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
           .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
 
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    if return_breakdown:
+        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, breakdown
+    else:
+        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
+
+def accuracy_with_class_breakdown(output, target, topk=(1,), return_breakdown=False, prev_breakdown={}):
+    """
+    Based on timm.utils.accuracy, but added breakdown of per-class accuracy.
+    prev_breakdown should be given if return_breakdown=True.
+    :return:
+    """
+    maxk = min(max(topk), output.size()[1])
+    batch_size = target.size(0)
+    _, pred = output.topk(maxk, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(target.reshape(1, -1).expand_as(pred))
+    correct_for_topk = [correct[:min(k, maxk)].reshape(-1).float().sum(0) * 100. / batch_size for k in topk]
+
+    if return_breakdown:
+        pred_top1 = np.array(pred[0].cpu())
+        for i, t in enumerate(np.array(target.cpu())):
+            prev_breakdown[t][pred_top1[i]] += 1
+        return correct_for_topk, prev_breakdown
+
+    else:
+        return correct_for_topk
