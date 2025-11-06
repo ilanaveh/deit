@@ -23,8 +23,27 @@ class VitMasks(VisionTransformer):
             patch_mask: Optional tensor [B, num_patches] with 1=keep, 0=mask.
                         CLS/reg tokens are automatically kept.
         """
+        # same as original:
         x = self.patch_embed(x)
         x = self._pos_embed(x)
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Apply Mask (New) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if patch_mask is not None:
+            patch_mask = patch_mask.to(dtype=x.dtype, device=x.device)
+
+            # Always keep prefix tokens (CLS/reg)
+            if self.num_prefix_tokens > 0:
+                ones_prefix = torch.ones((x.shape[0], self.num_prefix_tokens), dtype=x.dtype, device=x.device)
+                patch_mask = torch.cat([ones_prefix, patch_mask], dim=1)
+
+            # Expand mask to embedding dimension
+            patch_mask = patch_mask.unsqueeze(-1)  # [B, N, 1]
+
+            # Apply mask
+            x = x * patch_mask
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        # Same as original:
         x = self.patch_drop(x)
         x = self.norm_pre(x)
         if self.grad_checkpointing and not torch.jit.is_scripting():
