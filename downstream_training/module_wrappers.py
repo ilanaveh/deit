@@ -3,7 +3,7 @@
 Wrappers for Timm's modules.
 Location of Timm's original modules: /usr/local/lib/python3.10/dist-packages/timm/models/vision_transformer.py
 
-1. VitMasks -
+1. VitMask -
 """
 
 from timm.models.vision_transformer import VisionTransformer
@@ -13,7 +13,7 @@ from typing import Optional
 from timm.models._manipulate import checkpoint_seq
 
 
-class VitMasks(VisionTransformer):
+class VitMask(VisionTransformer):
     def forward_features(self, x: torch.Tensor, patch_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Original method: timm.models.vision_transformer.VisionTransformer.forward_features
