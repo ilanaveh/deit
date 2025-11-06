@@ -160,7 +160,7 @@ def build_dataset(is_train, args):
 
         nb_classes = len(args.desired_classes)
         dataset = AffectnetDataset(root, transform=transform, des_classes=args.desired_classes,
-                                   balance_clss=args.balance_clss, debug=args.debug)
+                                   balance_clss=args.balance_clss, debug=args.debug, get_landmarks=args.get_landmarks)
 
     return dataset, nb_classes
 
