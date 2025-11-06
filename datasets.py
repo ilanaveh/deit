@@ -62,7 +62,8 @@ class INatDataset(ImageFolder):
 
 
 class AffectnetDataset(ImageFolder):
-    def __init__(self, root, transform=None, target_transform=None, des_classes=[], balance_clss=False, debug=False):
+    def __init__(self, root, transform=None, target_transform=None, des_classes=[], balance_clss=False, debug=False,
+                 get_landmarks=False):
         self.des_classes = des_classes  # desired classes (list of integeres, between 0-10)
 
         # Number of images in each AffectNet category (in train_set):
@@ -74,12 +75,18 @@ class AffectnetDataset(ImageFolder):
         # if debugging, build small dataset:
         self.limit_dataset_size = 100 if debug else None
 
+        # 06/11/25: Add get_landmarks argument: if True, self.samples will also include landmarks array (in addition to
+        #     [image_path, target])
+        self.get_landmarks = get_landmarks
+
         super().__init__(root, loader=default_loader, transform=transform, target_transform=target_transform)
 
     def make_dataset(self, directory, class_to_idx=None, extensions=None, is_valid_file=None):
         """
         Override the make_dataset method, since Affectnet is not organized in sub-folders corresponding to classes.
         Original method (used by ImageFolder): /usr/local/lib/python3.10/dist-packages/torchvision/datasets/folder.py
+        06/11/25: If self.get_landmarks is True, self.samples will also include landmarks array (in addition to
+            [image_path, target])
         """
         # Copy the first part from original make_dataset method:
         directory = os.path.expanduser(directory)
@@ -109,7 +116,11 @@ class AffectnetDataset(ImageFolder):
                     if (not self.balance_clss and not self.limit_dataset_size) \
                             or (track_num_ims_each_clss[ann] < target_num):
                         path = os.path.join(images_path, img)
-                        images.append((path, self.class_to_idx[ann]))
+                        if self.get_landmarks:
+                            lnd = np.load(os.path.join(ann_path, (im_id + '_lnd.npy')))
+                            images.append((path, self.class_to_idx[ann], lnd))
+                        else:
+                            images.append((path, self.class_to_idx[ann]))
                         if self.balance_clss or self.limit_dataset_size:
                             track_num_ims_each_clss[ann] += 1
                             if np.all([v >= target_num for v in track_num_ims_each_clss.values()]):
