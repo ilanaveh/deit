@@ -223,6 +223,12 @@ def get_args_parser():
     parser.add_argument('--ims2save_pth', default='/home/projects/bagon/ilanaveh/code/Transformers/deit/'
                                                   'ims2save_for_logging/ims2save.txt',
                         type=str, help='path to text file with list of images to save.')
+
+    # For masking patches, according to facial landmarks:
+    parser.add_argument('--select_patches', default=[], type=str, nargs='+',
+                        help="Which facial-landmarks to use for including patches."
+                             "Options: eyes, nose, mouth, outline. "
+                             "Default: empty list -> no mask (use all patches)")
     return parser
 
 
@@ -243,6 +249,7 @@ def main(args):
 
     n_cls = len(args.desired_classes)
 
+    args.get_landmarks = bool(args.select_patches)  # for build_dataset
     # Change model name to format:
     #   "finetune_deit_model_blur{deit_model_training_blur}_affectnet_blur{affectnet_training_blur}_{suf}"
     # If starting from original pretrained deit (i.e. args.deit_model_name=None):
