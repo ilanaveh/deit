@@ -1,8 +1,7 @@
 """
 4/11/25
-Evaluate performance of downstream-training models:
-    1. Plot accuracies
-    2. Breakdown of performance for different classes
+Evaluate performance of downstream-training models, including breakdown of performance for different classes (confusion
+matrices).
 """
 from deit.datasets import build_dataset
 from deit.datasets import add_blur_transform
@@ -18,7 +17,7 @@ import numpy as np
 
 save_figs = False
 save_dir = '/home/projects/bagon/ilanaveh/code/Transformers/deit/downstream_training/figures/from_downstream_eval'
-model_blurs = ['0', '4', '8', '16', '0-4', '0-8', '0-16']
+model_blurs = ['0', '4', '0-4', '8', '0-8', '16', '0-16']
 test_blurs = {'0': [0], '4': [4], '8': [8], '16': [16], '0-4': [4], '0-8': [8], '0-16': [16]}
 args = SimpleNamespace(data_set="Affectnet", data_path='/home/projects/bagon/ilanaveh/data/AffectNet',
                        desired_classes=[0, 1, 2, 3, 4, 5, 6, 7], balance_clss=False, debug=False,
@@ -47,6 +46,7 @@ for model_blur in model_blurs:
     )
 
     model.to(device)
+    model.eval()
     checkpoint = torch.load(os.path.join(model_dir, model_name, 'checkpoint.pth'), map_location='cpu')
     model.load_state_dict(checkpoint['model'])
 
@@ -75,10 +75,13 @@ for model_blur in model_blurs:
             tot_samples_in_class = np.sum([s for s in breakdown[c].values()])
             class_accs[model_blur][c] = breakdown[c][c] / tot_samples_in_class
 
+        # Add total accuracy for current model (mean across classes):
+        class_accs[model_blur]['Mean Acc'] = test_stats['acc1']
+
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Plot ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         conf_matrix = pd.DataFrame(breakdown).T  # .T transposes so rows = true labels, cols = predicted
 
-        # rename both rows (index) and columns using the mapping
+        # rename both rows (index) and columns to class labels
         conf_matrix = conf_matrix.rename(index=class_label_dict, columns=class_label_dict)
 
         # plot
@@ -93,4 +96,7 @@ for model_blur in model_blurs:
         if save_figs:
             f.savefig(os.path.join(save_dir, f"Conf mat {ttl.replace(':', '')}.jpg"))
 
+class_accs_df = pd.DataFrame(class_accs).T
+class_accs_df = class_accs_df.rename(columns=class_label_dict)
+print(class_accs_df)
 print('done')
