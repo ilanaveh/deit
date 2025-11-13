@@ -52,3 +52,9 @@ class VitMask(VisionTransformer):
             x = self.blocks(x)
         x = self.norm(x)
         return x
+
+    def forward(self, x: torch.Tensor, patch_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # Define new forward (same as original in VisionTransformer, but uses the new forward_features method
+        x = self.forward_features(x, patch_mask)
+        x = self.forward_head(x)
+        return x
