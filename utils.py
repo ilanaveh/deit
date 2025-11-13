@@ -236,3 +236,22 @@ def init_distributed_mode(args):
                                          world_size=args.world_size, rank=args.rank)
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
+
+
+def build_patch_mask(landmarks, image_size=224, patch_size=16):
+    """
+    landmarks: Tensor of (B, x, y) coords in image space, for batch of faces.
+    """
+    num_patches_per_row = image_size // patch_size
+    B = landmarks.shape[0]
+    mask = torch.zeros(B, num_patches_per_row * num_patches_per_row)
+    for i in range(B):  # loop over images in batch
+        for x, y in landmarks[i, :, :]:
+            if (x > image_size) or (y > image_size) or (x < 0) or (y < 0):
+                continue
+            px = int(x // patch_size)
+            py = int(y // patch_size)
+            idx = py * num_patches_per_row + px
+            mask[i, idx] = 1.0
+
+    return mask  # [B, num_patches]
