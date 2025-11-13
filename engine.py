@@ -39,12 +39,24 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         applied_blurs_all = []
 
     for sample in metric_logger.log_every(data_loader, print_freq, header):
-
+        # 9/11/25: Add option to get landmarks from sample (relevant for downstream training)
+        apply_mask = False
         if len(sample) == 2:
             samples, targets = sample
-        else:
-            samples, targets, applied_blurs = sample
+        elif len(sample) == 3:
+            if bool(args.blur_max):
+                # 3rd argument is 'applied_blurs' (in main_tmp, if bool(args.blur_max) => CustomCompose is used)
+                samples, targets, applied_blurs = sample
+                applied_blurs_all += applied_blurs.tolist()
+            else:
+                # 3rd argument is 'landmarks' (relevant only for downstream training)
+                samples, targets, landmarks = sample  # landmarks: tensor of shape [B, n_lnd, XY] = [B, 68, 2]
+                apply_mask = True
+        else:  # len(sample) = 4
+            # Both applied_blurs and landmarks are returned (this entails we're in downstream training + variable-blur.
+            samples, targets, applied_blurs, landmarks = sample
             applied_blurs_all += applied_blurs.tolist()
+            apply_mask = True
 
         # IN 21/08/25: add option to get separate sample for teacher (without blur - implemented in BlurDataset):
         if isinstance(samples, dict):
@@ -82,7 +94,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                 outputs_high, feats_high = model(samples_tchr, return_features=True)
                 outputs_blur, feats_blur = model(samples, return_features=True)
             else:
-                outputs = model(samples)
+                if apply_mask:
+                    patch_mask = utils.build_patch_mask(landmarks)
+                    outputs = model(samples, patch_mask)
+                else:
+                    outputs = model(samples)
             if not args.cosub:
                 if isinstance(criterion, DistillationLoss):
                     if sep_smpl_tchr:
