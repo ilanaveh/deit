@@ -227,7 +227,7 @@ def get_args_parser():
     # For masking patches, according to facial landmarks:
     parser.add_argument('--select_patches', default=[], type=str, nargs='+',
                         help="Which facial-landmarks to use for including patches."
-                             "Options: eyes, nose, mouth, outline. "
+                             "Options: eyes, nose, mouth, eyebrows, outline. "
                              "Default: empty list -> no mask (use all patches)")
     return parser
 
@@ -268,6 +268,17 @@ def main(args):
 
     output_dir = Path(args.output_dir) / args.model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
+
+    # For adding mask to patches (according to facial landmarks):
+    landmarks_dict = {
+        'outline': list(range(0, 17)),  # 1-17 in illustration, inds: 0-16
+        'eyebrows': list(range(17, 27)),  # 18-27 in illustration, inds: 17-26
+        'nose': list(range(27, 36)),  # 28-36 in illustration, inds: 27-35
+        'eyes': list(range(36, 48)),  # 37-48 in illustration, inds: 36-47
+        'mouth': list(range(48, 68))  # 49-68 in illustration, inds: 48-67
+    }
+
+    args.desired_landmark_inds = [ind for ptch in args.select_patches for ind in landmarks_dict[ptch]]
 
     print(f"=> Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
     print("Train Dataset:")
