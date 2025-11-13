@@ -95,7 +95,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                 outputs_blur, feats_blur = model(samples, return_features=True)
             else:
                 if apply_mask:
+                    # Filter only desired landmarks:
+                    landmarks = landmarks[:, args.desired_landmark_inds, :]
+                    # Create mask:
                     patch_mask = utils.build_patch_mask(landmarks)
+                    # Pass mask to model, to drop all other patches:
                     outputs = model(samples, patch_mask)
                 else:
                     outputs = model(samples)
