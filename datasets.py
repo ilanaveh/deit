@@ -117,7 +117,8 @@ class AffectnetDataset(ImageFolder):
                             or (track_num_ims_each_clss[ann] < target_num):
                         path = os.path.join(images_path, img)
                         if self.get_landmarks:
-                            lnd = np.load(os.path.join(ann_path, (im_id + '_lnd.npy')))
+                            # Load and reshape to [n_lndmrks, XY]
+                            lnd = np.load(os.path.join(ann_path, (im_id + '_lnd.npy'))).reshape([68, 2])
                             images.append((path, self.class_to_idx[ann], lnd))
                         else:
                             images.append((path, self.class_to_idx[ann]))
@@ -134,6 +135,30 @@ class AffectnetDataset(ImageFolder):
                 print(f"Number of images from class {ann}: {v}")
 
         return images
+
+    # Override the __getitem__ method, s.t. facial landmarks of each image are returned (if self.get_landmarks=True)
+    # Original __getitem__ is from torchvision.datasets.folder.DatasetFolder.__getitem__.
+    def __getitem__(self, index):
+        # New (for getting landmarks for downstream training):
+        if self.get_landmarks:
+            path, target, landmarks = self.samples[index]
+        else:
+            # copy-paste original __getitem__:
+            path, target = self.samples[index]
+
+        # copy-paste original __getitem__:
+        sample = self.loader(path)
+        if self.transform is not None:
+            sample = self.transform(sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        # New (for getting landmarks for downstream training):
+        if self.get_landmarks:
+            return sample, target, landmarks
+        else:
+            # copy-paste original __getitem__:
+            return sample, target
 
 
 def build_dataset(is_train, args):
@@ -408,11 +433,16 @@ class BlurAffectnetDataset(AffectnetDataset):
 
     # Override the __getitem__ method, s.t. the blur level applied for each image is returned (from BlurDataset):
     # (9/9/25: also return high-res image for teacher, if get_tchr_sample).
+    # 9/11/25: also return landmarks, if self.get_landmarks
     def __getitem__(self, index):
         seed = torch.randint(0, 1000000, (1,)).item()
 
         # 1. Copy the original ImageFolder getitem method, but add applied_blur as output if GaussianBlurRand is used:
-        path, target = self.samples[index]
+        # First, if self.get_landmarks => get landmarks from self.samples:
+        if self.get_landmarks:
+            path, target, landmarks = self.samples[index]
+        else:
+            path, target = self.samples[index]
         sample = self.loader(path)
         blur_in_transforms = isinstance(self.transform.transforms[0], GaussianBlurRand) or \
                              isinstance(self.transform.transforms[0], GaussianBlur)
@@ -465,13 +495,20 @@ class BlurAffectnetDataset(AffectnetDataset):
 
         # 2. return blur level, in addition to sample & target.
         #    (9/9/25: also return tchr_sample if required).
+        #    (9/11/25: also return landmarks if required).
         if self.get_tchr_sample:
             sample = {'student': sample, 'teacher': sample_tchr}
 
         if self.return_blur:
-            return sample, target, applied_blur
+            if self.get_landmarks:
+                return sample, target, applied_blur, landmarks
+            else:
+                return sample, target, applied_blur
         else:
-            return sample, target
+            if self.get_landmarks:
+                return sample, target, landmarks
+            else:
+                return sample, target
 
 
 def build_dataset_blur(is_train, args, return_blur=False, get_tchr_sample=False):
