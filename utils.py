@@ -13,6 +13,8 @@ import datetime
 
 import torch
 import torch.distributed as dist
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 class SmoothedValue(object):
@@ -255,3 +257,54 @@ def build_patch_mask(landmarks, image_size=224, patch_size=16):
             mask[i, idx] = 1.0
 
     return mask  # [B, num_patches]
+
+
+def visualize_patch_mask(img, patch_mask, landmarks, patch_size=16, alpha=0.5):
+    """
+
+    :param img: Tensor or array [3, H, W] or [H, W, 3] in 0-1 range or 0-255 range.
+    :param patch_mask: 1-D tensor of length (H/patch_size * W/patch_size)
+                       or 2-D tensor of shape [H/patch_size, W/patch_size].
+    :param landmarks: Tensor or array [N, 2] with XY coordinates of chosen landmarks
+    :param patch_size: ViT patch size.
+    :param alpha: blending factor for overlay (0 = only image, 1 = only mask).
+    """
+    # --- Normalize input ---
+    img = img.detach().cpu().numpy()
+    if img.ndim == 3 and img.shape[0] == 3:
+        img = np.transpose(img, (1, 2, 0))
+    img = img.astype(np.float32)
+
+    H, W = img.shape[:2]
+    grid_h, grid_w = H // patch_size, W // patch_size
+
+    # --- Prepare mask ---
+    mask = np.array(patch_mask, dtype=np.float32)
+    if mask.ndim == 1:
+        mask = mask.reshape(grid_h, grid_w)
+
+    # Upsample mask to image size using nearest-neighbor interpolation
+    mask_tensor = torch.tensor(mask).unsqueeze(0).unsqueeze(0)  # [1,1,h,w]
+    mask_up = torch.nn.functional.interpolate(
+        mask_tensor, size=(H, W), mode='nearest'
+    )[0, 0].numpy()
+
+    # --- Color overlay (green = active patches) ---
+    overlay = np.zeros_like(img)
+    overlay[..., 1] = mask_up  # put mask in green channel
+    vis = (1 - alpha) * img + alpha * overlay
+
+    plt.figure(figsize=(6, 6))
+    plt.imshow(vis)
+
+    if landmarks is not None:
+        landmarks = np.array(landmarks)
+        plt.scatter(
+            landmarks[:, 0], landmarks[:, 1],
+            c="red", s=10, edgecolors="white", linewidths=0.5
+        )
+
+    plt.axis("off")
+    plt.title("Patch Mask Overlay")
+    plt.show()
+
