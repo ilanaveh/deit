@@ -229,6 +229,7 @@ def get_args_parser():
                         help="Which facial-landmarks to use for including patches."
                              "Options: eyes, nose, mouth, eyebrows, outline. "
                              "Default: empty list -> no mask (use all patches)")
+    parser.add_argument('--debug_mask', action='store_true', help='option to visualize patches that remain after mask')
     return parser
 
 
@@ -248,6 +249,7 @@ def main(args):
     cudnn.benchmark = True
 
     n_cls = len(args.desired_classes)
+    n_ptch = len(args.select_patches)
 
     args.get_landmarks = bool(args.select_patches)  # for build_dataset
     # Change model name to format:
@@ -262,6 +264,7 @@ def main(args):
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
     args.model_name = args.model_name + '_unbalanced' if not args.balance_clss else args.model_name
+    args.model_name = args.model_name + '_{}ptch'.format(n_ptch) if bool(args.select_patches) else args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     print(f"~~~\n{args.model_name}\n~~~")
@@ -279,6 +282,8 @@ def main(args):
     }
 
     args.desired_landmark_inds = [ind for ptch in args.select_patches for ind in landmarks_dict[ptch]]
+    if bool(args.select_patches):
+        print(f"Selected patches: {args.select_patches}")
 
     print(f"=> Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
     print("Train Dataset:")
