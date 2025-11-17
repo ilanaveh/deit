@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt  # for saving example images.
 import numpy as np  # for saving example images.
 import torch  # for setting seed
 from collections import Counter
+from PIL import Image, ImageDraw
+from scipy import ndimage
 
 
 class INatDataset(ImageFolder):
@@ -63,7 +65,7 @@ class INatDataset(ImageFolder):
 
 class AffectnetDataset(ImageFolder):
     def __init__(self, root, transform=None, target_transform=None, des_classes=[], balance_clss=False, debug=False,
-                 get_landmarks=False):
+                 get_landmarks=False, desired_landmarks=[]):
         self.des_classes = des_classes  # desired classes (list of integeres, between 0-10)
 
         # Number of images in each AffectNet category (in train_set):
@@ -78,6 +80,7 @@ class AffectnetDataset(ImageFolder):
         # 06/11/25: Add get_landmarks argument: if True, self.samples will also include landmarks array (in addition to
         #     [image_path, target])
         self.get_landmarks = get_landmarks
+        self.desired_landmarks = desired_landmarks
 
         super().__init__(root, loader=default_loader, transform=transform, target_transform=target_transform)
 
@@ -149,7 +152,15 @@ class AffectnetDataset(ImageFolder):
         # copy-paste original __getitem__:
         sample = self.loader(path)
         if self.transform is not None:
-            sample = self.transform(sample)
+            if self.get_landmarks:
+                landmarks = landmarks[self.desired_landmarks, :]
+                H, W = sample.height, sample.width
+                mask = embed_landmarks_as_mask(landmarks, image_size=(H, W))  # PIL Image (H, W)
+                img_plus_mask = stack_pil_image_and_mask(sample, mask)  # [4, H, W]
+                sample, mask_t = self.transform(img_plus_mask)
+                landmarks = extract_landmarks_from_mask_pil(mask_t)  # should be updated coordinates after transform.
+            else:
+                sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -185,7 +196,8 @@ def build_dataset(is_train, args):
 
         nb_classes = len(args.desired_classes)
         dataset = AffectnetDataset(root, transform=transform, des_classes=args.desired_classes,
-                                   balance_clss=args.balance_clss, debug=args.debug, get_landmarks=args.get_landmarks)
+                                   balance_clss=args.balance_clss, debug=args.debug, get_landmarks=args.get_landmarks,
+                                   desired_landmarks=args.desired_landmark_inds)
 
     return dataset, nb_classes
 
@@ -209,6 +221,10 @@ def build_transform(is_train, args):
             # RandomCrop
             transform.transforms[0] = transforms.RandomCrop(
                 args.input_size, padding=4)
+
+        if ('get_landmarks' in args) and args.get_landmarks:
+            return ComposeWithMask(transform.transforms)
+
         return transform
 
     t = []
@@ -221,6 +237,10 @@ def build_transform(is_train, args):
 
     t.append(transforms.ToTensor())
     t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
+
+    if ('get_landmarks' in args) and args.get_landmarks:
+        return ComposeWithMask(t)
+
     return transforms.Compose(t)
 
 
@@ -552,6 +572,38 @@ def build_dataset_blur(is_train, args, return_blur=False, get_tchr_sample=False)
     return dataset, nb_classes
 
 
+class ComposeWithMask:
+    """
+    Based on torch's Compose (torchvision.transforms.transforms.Compose), but change __call__, s.t. the image with the
+    mask are passed to all transforms up to Normalize, and then for Normalize - only the image is passed.
+    """
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, img):
+        for t in self.transforms:
+            if isinstance(t, transforms.Normalize):
+                # Split mask from image (from now on, transforms would be applied only to image):
+                img, mask = img[:3], img[3:]  # assume image was already transformed to tensor.
+
+            # Apply transform:
+            try:
+                img = t(img)
+            except:
+                print()
+
+        # return image and mask:
+        return img, mask
+
+    def __repr__(self) -> str:
+        format_string = self.__class__.__name__ + "("
+        for t in self.transforms:
+            format_string += "\n"
+            format_string += f"    {t}"
+        format_string += "\n)"
+        return format_string
+
+
 class CustomCompose:
     """
     Based on torch's Compose (torchvision.transforms.transforms.Compose), but change __call__, s.t. it can receive the
@@ -594,3 +646,52 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+def embed_landmarks_as_mask(landmarks, image_size, radius=2):
+    """
+    Create a single-channel (L) PIL image mask marking the landmark points.
+    :param landmarks: Nx2 (x, y) in pixel coords
+    :param image_size: (H, W)
+    :param radius: small disk radius to mark each landmark
+    :return: PIL.Image
+    """
+    mask = Image.new("L", image_size, 0)
+    draw = ImageDraw.Draw(mask)
+    for (x, y) in landmarks:
+        draw.ellipse(
+            (x - radius, y - radius, x + radius, y + radius),
+            fill=255
+        )
+    return mask
+
+
+def stack_pil_image_and_mask(image, mask):
+    """
+    Converts both PIL images to a NumPy array with 4 channels: RGB + mask
+    """
+    img_arr = np.array(image, dtype=np.uint8)
+    mask_arr = np.expand_dims(np.array(mask, dtype=np.uint8), -1)  # add channel dim
+    img_plus_mask = np.concatenate([img_arr, mask_arr], axis=-1)
+    return Image.fromarray(img_plus_mask)
+
+
+def extract_landmarks_from_mask_pil(mask_pil, threshold=128):
+    """
+    Get mask with blobs around landmarks, and extract coordinates of landmarks (mean of each blob)
+    :param mask_pil:
+    :param threshold:
+    :return:
+    """
+    mask_np = np.array(mask_pil)
+    labeled, n_blobs = ndimage.label((mask_np > threshold))  # get connected components
+    coords = []
+    for i in range(1, n_blobs + 1):
+        ys, xs = np.nonzero(labeled == i)
+        if len(xs) >= 1:
+            # Use centroid for each blob
+            x_mean = float(xs.mean())
+            y_mean = float(ys.mean())
+            coords.append((x_mean, y_mean))
+    coords = np.array(coords)
+    return coords
