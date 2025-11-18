@@ -4,7 +4,7 @@ import os
 import json
 
 from torchvision import datasets, transforms
-from timm.data.transforms import RandomResizedCropAndInterpolation  # for validating transform_tchr
+from timm.data.transforms import RandomResizedCropAndInterpolation, MaybeToTensor
 from torchvision.datasets.folder import ImageFolder, default_loader
 
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
@@ -18,6 +18,11 @@ import torch  # for setting seed
 from collections import Counter
 from PIL import Image, ImageDraw
 from scipy import ndimage
+import sys
+
+
+sys.path.append("/home/projects/bagon/ilanaveh/code/Transformers/deit")  # for importing utils
+from utils import visualize_patch_mask
 
 
 class INatDataset(ImageFolder):
@@ -65,7 +70,7 @@ class INatDataset(ImageFolder):
 
 class AffectnetDataset(ImageFolder):
     def __init__(self, root, transform=None, target_transform=None, des_classes=[], balance_clss=False, debug=False,
-                 get_landmarks=False, desired_landmarks=[]):
+                 get_landmarks=False, desired_landmarks=[], save_landmark_figs=False, get_im_id=False):
         self.des_classes = des_classes  # desired classes (list of integeres, between 0-10)
 
         # Number of images in each AffectNet category (in train_set):
@@ -81,6 +86,8 @@ class AffectnetDataset(ImageFolder):
         #     [image_path, target])
         self.get_landmarks = get_landmarks
         self.desired_landmarks = desired_landmarks
+        self.save_landmark_figs = save_landmark_figs
+        self.get_im_id = get_im_id
 
         super().__init__(root, loader=default_loader, transform=transform, target_transform=target_transform)
 
@@ -123,6 +130,9 @@ class AffectnetDataset(ImageFolder):
                             # Load and reshape to [n_lndmrks, XY]
                             lnd = np.load(os.path.join(ann_path, (im_id + '_lnd.npy'))).reshape([68, 2])
                             images.append((path, self.class_to_idx[ann], lnd))
+                            if self.save_landmark_figs and (i < 10):
+                                visualize_patch_mask(im_id=im_id, im_pth=images_path, landmarks=lnd, save_fig=True,
+                                                     suf='before_transforms')
                         else:
                             images.append((path, self.class_to_idx[ann]))
                         if self.balance_clss or self.limit_dataset_size:
@@ -154,11 +164,11 @@ class AffectnetDataset(ImageFolder):
         if self.transform is not None:
             if self.get_landmarks:
                 landmarks = landmarks[self.desired_landmarks, :]
-                H, W = sample.height, sample.width
-                mask = embed_landmarks_as_mask(landmarks, image_size=(H, W))  # PIL Image (H, W)
-                img_plus_mask = stack_pil_image_and_mask(sample, mask)  # [4, H, W]
-                sample, mask_t = self.transform(img_plus_mask)
-                landmarks = extract_landmarks_from_mask_pil(mask_t)  # should be updated coordinates after transform.
+                # H, W = sample.height, sample.width
+                # mask = embed_landmarks_as_mask(landmarks, image_size=(H, W))  # PIL Image (H, W)
+                # img_plus_mask = stack_pil_image_and_mask(sample, mask)  # [4, H, W]
+                sample = self.transform(sample)
+                # landmarks = extract_landmarks_from_mask_pil(mask_t)  # should be updated coordinates after transform.
             else:
                 sample = self.transform(sample)
         if self.target_transform is not None:
@@ -166,10 +176,12 @@ class AffectnetDataset(ImageFolder):
 
         # New (for getting landmarks for downstream training):
         if self.get_landmarks:
+            if self.get_im_id:
+                im_id = path.split('/')[-1].split('.jpg')[0]
+                return sample, target, landmarks, im_id
             return sample, target, landmarks
-        else:
-            # copy-paste original __getitem__:
-            return sample, target
+        # copy-paste original __getitem__:
+        return sample, target
 
 
 def build_dataset(is_train, args):
@@ -197,7 +209,8 @@ def build_dataset(is_train, args):
         nb_classes = len(args.desired_classes)
         dataset = AffectnetDataset(root, transform=transform, des_classes=args.desired_classes,
                                    balance_clss=args.balance_clss, debug=args.debug, get_landmarks=args.get_landmarks,
-                                   desired_landmarks=args.desired_landmark_inds)
+                                   desired_landmarks=args.desired_landmark_inds, save_landmark_figs=args.debug_mask,
+                                   get_im_id=args.debug_mask)
 
     return dataset, nb_classes
 
@@ -577,23 +590,16 @@ class ComposeWithMask:
     Based on torch's Compose (torchvision.transforms.transforms.Compose), but change __call__, s.t. the image with the
     mask are passed to all transforms up to Normalize, and then for Normalize - only the image is passed.
     """
-    def __init__(self, transforms):
-        self.transforms = transforms
+    def __init__(self, transforms_list):
+        toTensorInd = [isinstance(t, MaybeToTensor) or isinstance(t, transforms.ToTensor)
+                       for t in transforms_list].index(True)
+        self.transforms = transforms_list[toTensorInd:]  # remove all spatial transformations, so landmarks will stay aligned.
 
     def __call__(self, img):
         for t in self.transforms:
-            if isinstance(t, transforms.Normalize):
-                # Split mask from image (from now on, transforms would be applied only to image):
-                img, mask = img[:3], img[3:]  # assume image was already transformed to tensor.
+            img = t(img)
 
-            # Apply transform:
-            try:
-                img = t(img)
-            except:
-                print()
-
-        # return image and mask:
-        return img, mask
+        return img
 
     def __repr__(self) -> str:
         format_string = self.__class__.__name__ + "("
@@ -609,8 +615,8 @@ class CustomCompose:
     Based on torch's Compose (torchvision.transforms.transforms.Compose), but change __call__, s.t. it can receive the
     actual blur level used in GaussianBlurRand.
     """
-    def __init__(self, transforms):
-        self.transforms = transforms
+    def __init__(self, transforms_list):
+        self.transforms = transforms_list
 
     def __call__(self, img, seed=None):
         for t in self.transforms:
