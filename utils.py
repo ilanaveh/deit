@@ -16,6 +16,8 @@ import torch.distributed as dist
 import numpy as np
 import matplotlib.pyplot as plt
 
+from PIL import Image
+
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -259,10 +261,12 @@ def build_patch_mask(landmarks, image_size=224, patch_size=16):
     return mask  # [B, num_patches]
 
 
-def visualize_patch_mask(img, patch_mask, landmarks, patch_size=16, alpha=0.5):
+def visualize_patch_mask(img=None, im_id='', landmarks=None, patch_mask=None, save_fig=False, patch_size=16, alpha=.5,
+                         suf='', im_pth=''):
     """
 
     :param img: Tensor or array [3, H, W] or [H, W, 3] in 0-1 range or 0-255 range.
+                If None - im_id and im_pth must be given (form loading image from path).
     :param patch_mask: 1-D tensor of length (H/patch_size * W/patch_size)
                        or 2-D tensor of shape [H/patch_size, W/patch_size].
     :param landmarks: Tensor or array [N, 2] with XY coordinates of chosen landmarks
@@ -270,32 +274,43 @@ def visualize_patch_mask(img, patch_mask, landmarks, patch_size=16, alpha=0.5):
     :param alpha: blending factor for overlay (0 = only image, 1 = only mask).
     """
     # --- Normalize input ---
-    img = img.detach().cpu().numpy()
+    save_pth = '/home/labs/waic/ilanaveh/code/Transformers/deit/downstream_training/figures/vis_facial_landmark_masks'
+    if img is not None:
+        img = img.detach().cpu().numpy()
+    else:
+        img = Image.open(os.path.join(im_pth, im_id + '.jpg'))
+        img = np.asarray(img)
+
     if img.ndim == 3 and img.shape[0] == 3:
         img = np.transpose(img, (1, 2, 0))
     img = img.astype(np.float32)
 
+    if (img.max() > 1) and (img.min() >= 0):
+        img /= 255
+
     H, W = img.shape[:2]
     grid_h, grid_w = H // patch_size, W // patch_size
 
-    # --- Prepare mask ---
-    mask = np.array(patch_mask, dtype=np.float32)
-    if mask.ndim == 1:
-        mask = mask.reshape(grid_h, grid_w)
-
-    # Upsample mask to image size using nearest-neighbor interpolation
-    mask_tensor = torch.tensor(mask).unsqueeze(0).unsqueeze(0)  # [1,1,h,w]
-    mask_up = torch.nn.functional.interpolate(
-        mask_tensor, size=(H, W), mode='nearest'
-    )[0, 0].numpy()
-
-    # --- Color overlay (green = active patches) ---
-    overlay = np.zeros_like(img)
-    overlay[..., 1] = mask_up  # put mask in green channel
-    vis = (1 - alpha) * img + alpha * overlay
-
     plt.figure(figsize=(6, 6))
-    plt.imshow(vis)
+    plt.imshow(img)
+
+    if patch_mask is not None:
+        mask = np.array(patch_mask, dtype=np.float32)
+        if mask.ndim == 1:
+            mask = mask.reshape(grid_h, grid_w)
+
+        # Upsample mask to image size using nearest-neighbor interpolation
+        mask_tensor = torch.tensor(mask).unsqueeze(0).unsqueeze(0)  # [1,1,h,w]
+        mask_up = torch.nn.functional.interpolate(
+            mask_tensor, size=(H, W), mode='nearest'
+        )[0, 0].numpy()
+
+    # # --- Color overlay (green = active patches) ---
+    # overlay = np.zeros_like(img)
+    # overlay[..., 1] = mask_up  # put mask in green channel
+    # vis = (1 - alpha) * img + alpha * overlay
+
+        plt.imshow(mask_up, alpha=alpha)
 
     if landmarks is not None:
         landmarks = np.array(landmarks)
@@ -305,6 +320,11 @@ def visualize_patch_mask(img, patch_mask, landmarks, patch_size=16, alpha=0.5):
         )
 
     plt.axis("off")
-    plt.title("Patch Mask Overlay")
-    plt.show()
+    im_id = f'{im_id}_val' if 'val' in im_pth else im_id
+    ttl = f'{im_id}_Mask' if patch_mask is not None else im_id
+    ttl = f'{ttl}_Landmarks' if landmarks is not None else ttl
+    ttl = f'{ttl}_{suf}' if suf else ttl
+    plt.title(ttl)
 
+    if save_fig:
+        plt.savefig(os.path.join(save_pth, ttl+'.jpg'))
