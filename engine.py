@@ -5,7 +5,7 @@ Train and eval functions used in main_downstream.py
 """
 import math
 import sys
-sys.path.append("/home/projects/bagon/ilanaveh/code/Transformers/deit")  # for importing losses
+sys.path.append("/home/projects/bagon/ilanaveh/code/Transformers/deit")  # for importing losses, utils
 
 from typing import Iterable, Optional
 
@@ -52,9 +52,17 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                 # 3rd argument is 'landmarks' (relevant only for downstream training)
                 samples, targets, landmarks = sample  # landmarks: tensor of shape [B, n_lnd, XY] = [B, 68, 2]
                 apply_mask = True
-        else:  # len(sample) = 4
-            # Both applied_blurs and landmarks are returned (this entails we're in downstream training + variable-blur.
-            samples, targets, applied_blurs, landmarks = sample
+        elif len(sample) == 4:
+            apply_mask = True
+            if bool(args.blur_max):
+                # applied_blurs + landmarks are returned (entails we're in downstream training + variable-blur.
+                samples, targets, applied_blurs, landmarks = sample
+            else:
+                # landmarks and im_id are returned:
+                samples, targets, landmarks, im_id = sample
+        else:  # len(sample) = 5
+            # applied_blurs + landmarks + im_id are returned (entails we're in downstream training + variable-blur).
+            samples, targets, applied_blurs, landmarks, im_id = sample
             applied_blurs_all += applied_blurs.tolist()
             apply_mask = True
 
@@ -95,10 +103,12 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                 outputs_blur, feats_blur = model(samples, return_features=True)
             else:
                 if apply_mask:
-                    # Filter only desired landmarks:
-                    landmarks = landmarks[:, args.desired_landmark_inds, :]
                     # Create mask:
                     patch_mask = utils.build_patch_mask(landmarks)
+                    if args.debug_mask:
+                        for i in range(len(samples)):
+                            utils.visualize_patch_mask(img=samples[i], landmarks=landmarks[i], patch_mask=patch_mask[i],
+                                                       save_fig=True, suf='after_transform', im_id=im_id[i])
                     # Pass mask to model, to drop all other patches:
                     outputs = model(samples, patch_mask)
                 else:
