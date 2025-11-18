@@ -231,6 +231,11 @@ def get_args_parser():
                              "Options: eyes, nose, mouth, eyebrows, outline. "
                              "Default: empty list -> no mask (use all patches)")
     parser.add_argument('--debug_mask', action='store_true', help='option to visualize patches that remain after mask')
+    parser.add_argument('--landmark_bb_size', type=int, default=10,
+                        help="number of pixels around each landmark for bounding-box")
+    parser.add_argument('--thresh_jaccard_index', type=float, default=None,
+                        help='Threshold IoU between landmark bounding-box & patch, for including patch.'
+                             'If None: any intersection is enough. 0.5 is a standard choice.')
     return parser
 
 
