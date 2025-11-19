@@ -495,12 +495,12 @@ def main(args):
                     loss_scaler.load_state_dict(checkpoint['scaler'])
             lr_scheduler.step(args.start_epoch)
     if args.eval:
-        test_stats = evaluate(data_loader_val, model, device)
+        test_stats = evaluate(data_loader_val, model, device, args=args)
         print(f"Accuracy of the network on the {len(dataset_val)} test images with blur "
               f"{args.blur}: {test_stats['acc1']:.1f}%")
 
         if args.blur_max:
-            test_stats_blur_max = evaluate(data_loader_val_blur_max, model, device)
+            test_stats_blur_max = evaluate(data_loader_val_blur_max, model, device, args=args)
             print(f"Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
                   f"({args.blur_max}): {test_stats_blur_max['acc1']:.1f}%")
 
@@ -547,12 +547,12 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats = evaluate(data_loader_val, model, device)
+        test_stats = evaluate(data_loader_val, model, device, args=args)
         print(f"Accuracy of the network on the {len(dataset_val)} test images with blur "
               f"{args.blur}: {test_stats['acc1']:.1f}%")
 
         if args.blur_max:
-            test_stats_blur_max = evaluate(data_loader_val_blur_max, model, device)
+            test_stats_blur_max = evaluate(data_loader_val_blur_max, model, device, args=args)
             print(f"Accuracy of the network on the {len(dataset_val)} test images with maximal blur "
                   f"({args.blur_max}): {test_stats_blur_max['acc1']:.1f}%")
 
