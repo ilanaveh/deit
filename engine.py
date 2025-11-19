@@ -171,7 +171,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, return_breakdown=False, des_classes=None):
+def evaluate(data_loader, model, device, return_breakdown=False, des_classes=None, args=None):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -188,13 +188,41 @@ def evaluate(data_loader, model, device, return_breakdown=False, des_classes=Non
         else:
             breakdown = {c_tar: {c_pred: 0 for c_pred in des_classes} for c_tar in des_classes}
 
-    for images, target in metric_logger.log_every(data_loader, 10, header):
+    for sample in metric_logger.log_every(data_loader, 10, header):
+        # 9/11/25: Add option to get landmarks from sample (relevant for downstream training)
+        apply_mask = False
+        if len(sample) == 2:
+            images, targets = sample
+        else:
+            if len(sample) == 3:
+                # 3rd argument is 'landmarks' (relevant only for downstream training)
+                images, targets, landmarks = sample  # landmarks: tensor of shape [B, n_lnd, XY] = [B, 68, 2]
+
+            elif len(sample) == 4:
+                # landmarks and im_id are returned:
+                images, targets, landmarks, im_id = sample
+
+            apply_mask = True
+            landmarks = landmarks.to(device)
+
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
         # compute output
         with torch.cuda.amp.autocast():
-            output = model(images)
+            if apply_mask:
+                # Create mask:
+                patch_mask = utils.build_patch_mask(landmarks, bb_size=args.landmark_bb_size,
+                                                    thresh_jaccard=args.thresh_jaccard_index)
+                if args.debug_mask:
+                    for i in range(len(images)):
+                        utils.visualize_patch_mask(img=images[i], landmarks=landmarks[i], patch_mask=patch_mask[i],
+                                                   save_fig=True, im_id=im_id[i],
+                                                   suf=f'after_transform_jaccard{args.thresh_jaccard_index}')
+                # Pass mask to model, to drop all other patches:
+                outputs = model(images, patch_mask)
+            else:
+                output = model(images)
             loss = criterion(output, target)
         if return_breakdown:
             acc_list, breakdown = accuracy_with_class_breakdown(output, target, topk=(1, 5), return_breakdown=True,
