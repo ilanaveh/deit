@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from PIL import Image
+from torchvision import ops
 
 
 class SmoothedValue(object):
@@ -242,21 +243,44 @@ def init_distributed_mode(args):
     setup_for_distributed(args.rank == 0)
 
 
-def build_patch_mask(landmarks, image_size=224, patch_size=16):
+def build_patch_mask(landmarks, image_size=224, patch_size=16, bb_size=10, thresh_jaccard=0):
     """
     landmarks: Tensor of (B, x, y) coords in image space, for batch of faces.
+    bb_size: number of pixels around each landmark for bounding-box
+    thresh_jaccard: Threshold IoU between landmark bounding-box & patch, for including patch.
+                    0: any intersection is enough. 0.5 is a standard choice.
     """
-    num_patches_per_row = image_size // patch_size
+    num_patches_per_row = image_size // patch_size  # same for columns.
     B = landmarks.shape[0]
     mask = torch.zeros(B, num_patches_per_row * num_patches_per_row)
+
+    # get bounding-boxes of all patches (the same for all images, so only need to do this once)
+    ptch_bboxs = []
+    for r in range(num_patches_per_row):  # loop over rows
+        py1 = r * patch_size  # top border of patch (in pixels)
+        py2 = (r + 1) * patch_size  # bottom border of patch (in pixels)
+        for c in range(num_patches_per_row):  # loop over columns
+            px1 = c * patch_size  # left border of patch (in pixels)
+            px2 = (c + 1) * patch_size  # right border of patch (in pixels)
+
+            p_bbox = [px1, py1, px2, py2]
+            ptch_bboxs.append(p_bbox)  # ToDo: make sure order of patches here is the same as in mask (used in VitMask)
+    ptch_bboxs = torch.tensor(ptch_bboxs)
     for i in range(B):  # loop over images in batch
+        lnd_bboxs = []
+        # loop over landmarks:
         for x, y in landmarks[i, :, :]:
+            x, y = x.item(), y.item()
             if (x > image_size) or (y > image_size) or (x < 0) or (y < 0):
                 continue
-            px = int(x // patch_size)
-            py = int(y // patch_size)
-            idx = py * num_patches_per_row + px
-            mask[i, idx] = 1.0
+            l_bbox = [x-bb_size, y-bb_size, x+bb_size, y+bb_size]  # [x1, y1, x2, y2] - bbox around landmark
+            lnd_bboxs.append(l_bbox)
+        lnd_bboxs = torch.tensor(lnd_bboxs)
+
+        # check intersection with each patch:
+        iou_mat = ops.box_iou(ptch_bboxs, lnd_bboxs)
+        idx = iou_mat.max(1).values > thresh_jaccard  # use max, since it's sufficient to have one landmark in a ptach.
+        mask[i, idx] = 1.0
 
     return mask  # [B, num_patches]
 
