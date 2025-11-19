@@ -192,15 +192,15 @@ def evaluate(data_loader, model, device, return_breakdown=False, des_classes=Non
         # 9/11/25: Add option to get landmarks from sample (relevant for downstream training)
         apply_mask = False
         if len(sample) == 2:
-            images, targets = sample
+            images, target = sample
         else:
             if len(sample) == 3:
                 # 3rd argument is 'landmarks' (relevant only for downstream training)
-                images, targets, landmarks = sample  # landmarks: tensor of shape [B, n_lnd, XY] = [B, 68, 2]
+                images, target, landmarks = sample  # landmarks: tensor of shape [B, n_lnd, XY] = [B, 68, 2]
 
             elif len(sample) == 4:
                 # landmarks and im_id are returned:
-                images, targets, landmarks, im_id = sample
+                images, target, landmarks, im_id = sample
 
             apply_mask = True
             landmarks = landmarks.to(device)
@@ -220,7 +220,7 @@ def evaluate(data_loader, model, device, return_breakdown=False, des_classes=Non
                                                    save_fig=True, im_id=im_id[i],
                                                    suf=f'after_transform_jaccard{args.thresh_jaccard_index}')
                 # Pass mask to model, to drop all other patches:
-                outputs = model(images, patch_mask)
+                output = model(images, patch_mask)
             else:
                 output = model(images)
             loss = criterion(output, target)
