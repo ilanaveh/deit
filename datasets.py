@@ -20,7 +20,6 @@ from PIL import Image, ImageDraw
 from scipy import ndimage
 import sys
 
-
 sys.path.append("/home/projects/bagon/ilanaveh/code/Transformers/deit")  # for importing utils
 from utils import visualize_patch_mask
 
@@ -131,7 +130,7 @@ class AffectnetDataset(ImageFolder):
                             lnd = np.load(os.path.join(ann_path, (im_id + '_lnd.npy'))).reshape([68, 2])
                             images.append((path, self.class_to_idx[ann], lnd))
                             if self.save_landmark_figs and (i < 10):
-                                visualize_patch_mask(im_id=im_id, im_pth=images_path, landmarks=lnd, save_fig=True,
+                                visualize_patch_mask(im_id=im_id, im_pth=images_path, landmarks=lnd, save_fig=False,
                                                      suf='before_transforms')
                         else:
                             images.append((path, self.class_to_idx[ann]))
@@ -155,6 +154,7 @@ class AffectnetDataset(ImageFolder):
         # New (for getting landmarks for downstream training):
         if self.get_landmarks:
             path, target, landmarks = self.samples[index]
+            landmarks = landmarks[self.desired_landmarks, :]
         else:
             # copy-paste original __getitem__:
             path, target = self.samples[index]
@@ -162,15 +162,14 @@ class AffectnetDataset(ImageFolder):
         # copy-paste original __getitem__:
         sample = self.loader(path)
         if self.transform is not None:
-            if self.get_landmarks:
-                landmarks = landmarks[self.desired_landmarks, :]
-                # H, W = sample.height, sample.width
-                # mask = embed_landmarks_as_mask(landmarks, image_size=(H, W))  # PIL Image (H, W)
-                # img_plus_mask = stack_pil_image_and_mask(sample, mask)  # [4, H, W]
-                sample = self.transform(sample)
-                # landmarks = extract_landmarks_from_mask_pil(mask_t)  # should be updated coordinates after transform.
-            else:
-                sample = self.transform(sample)
+            # if self.get_landmarks:
+            #   H, W = sample.height, sample.width
+            #   mask = embed_landmarks_as_mask(landmarks, image_size=(H, W))  # PIL Image (H, W)
+            #   img_plus_mask = stack_pil_image_and_mask(sample, mask)  # [4, H, W]
+            #   sample = self.transform(sample)
+            #   landmarks = extract_landmarks_from_mask_pil(mask_t)  # should be updated coordinates after transform.
+            # else:
+            sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -235,6 +234,8 @@ def build_transform(is_train, args):
             transform.transforms[0] = transforms.RandomCrop(
                 args.input_size, padding=4)
 
+        # ToDo: ComposeWithMask is redundant (if not doing transforms on landmarks) --> just filter out geometrical
+        #  transforms here instead.
         if ('get_landmarks' in args) and args.get_landmarks:
             return ComposeWithMask(transform.transforms)
 
@@ -250,7 +251,8 @@ def build_transform(is_train, args):
 
     t.append(transforms.ToTensor())
     t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
-
+    # ToDo: ComposeWithMask is redundant (if not doing transforms on landmarks) --> just filter out geometrical
+    #  transforms here instead.
     if ('get_landmarks' in args) and args.get_landmarks:
         return ComposeWithMask(t)
 
@@ -356,6 +358,7 @@ class BlurDataset(ImageFolder):
     Based on original ImageFolder, but return the applied blur level in addition to the image.
     21/08/25: Add argument "get_tchr_sample", which determines whether to return also high-res image for teacher.
     """
+
     def __init__(
             self,
             root,
@@ -407,7 +410,7 @@ class BlurDataset(ImageFolder):
         if self.chosen_imgs_lst and (im_nm in self.chosen_imgs_lst) and self.save_imgs_pth:
             im_save_nm = '{}_blur{}.png'.format(im_nm, applied_blur) if self.return_blur else '{}.png'.format(im_nm)
             if not os.path.isfile(os.path.join(self.save_imgs_pth, im_save_nm)):
-                sample_norm = (sample-sample.min()) / (sample.max()-sample.min()) * 255
+                sample_norm = (sample - sample.min()) / (sample.max() - sample.min()) * 255
                 sample_numpy = np.array(sample_norm.permute(1, 2, 0)).astype('uint8')
                 plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm), sample_numpy)
                 # For creating image with only Blur transform:
@@ -424,7 +427,8 @@ class BlurDataset(ImageFolder):
 
                     # also save the image that is passed to teacher, if required.
                     if self.get_tchr_sample:
-                        sample_tchr_norm = (sample_tchr-sample_tchr.min()) / (sample_tchr.max()-sample_tchr.min()) * 255
+                        sample_tchr_norm = (sample_tchr - sample_tchr.min()) / (
+                                    sample_tchr.max() - sample_tchr.min()) * 255
                         sample_tchr_numpy = np.array(sample_tchr_norm.permute(1, 2, 0)).astype('uint8')
                         plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm.replace('.png', '_tchr.png')),
                                    sample_tchr_numpy)
@@ -521,7 +525,7 @@ class BlurAffectnetDataset(AffectnetDataset):
                     # also save the image that is passed to teacher, if required.
                     if self.get_tchr_sample:
                         sample_tchr_norm = (sample_tchr - sample_tchr.min()) / (
-                                    sample_tchr.max() - sample_tchr.min()) * 255
+                                sample_tchr.max() - sample_tchr.min()) * 255
                         sample_tchr_numpy = np.array(sample_tchr_norm.permute(1, 2, 0)).astype('uint8')
                         plt.imsave(os.path.join(self.save_imgs_pth, im_save_nm.replace('.png', '_tchr.png')),
                                    sample_tchr_numpy)
@@ -534,14 +538,17 @@ class BlurAffectnetDataset(AffectnetDataset):
 
         if self.return_blur:
             if self.get_landmarks:
+                if self.get_im_id:
+                    im_id = path.split('/')[-1].split('.jpg')[0]
+                    return sample, target, applied_blur, landmarks, im_id
                 return sample, target, applied_blur, landmarks
-            else:
-                return sample, target, applied_blur
-        else:
-            if self.get_landmarks:
-                return sample, target, landmarks
-            else:
-                return sample, target
+            return sample, target, applied_blur
+        if self.get_landmarks:
+            if self.get_im_id:
+                im_id = path.split('/')[-1].split('.jpg')[0]
+                return sample, target, landmarks, im_id
+            return sample, target, landmarks
+        return sample, target
 
 
 def build_dataset_blur(is_train, args, return_blur=False, get_tchr_sample=False):
@@ -590,10 +597,12 @@ class ComposeWithMask:
     Based on torch's Compose (torchvision.transforms.transforms.Compose), but change __call__, s.t. the image with the
     mask are passed to all transforms up to Normalize, and then for Normalize - only the image is passed.
     """
+
     def __init__(self, transforms_list):
         toTensorInd = [isinstance(t, MaybeToTensor) or isinstance(t, transforms.ToTensor)
                        for t in transforms_list].index(True)
-        self.transforms = transforms_list[toTensorInd:]  # remove all spatial transformations, so landmarks will stay aligned.
+        self.transforms = transforms_list[
+                          toTensorInd:]  # remove all spatial transformations, so landmarks will stay aligned.
 
     def __call__(self, img):
         for t in self.transforms:
@@ -615,6 +624,7 @@ class CustomCompose:
     Based on torch's Compose (torchvision.transforms.transforms.Compose), but change __call__, s.t. it can receive the
     actual blur level used in GaussianBlurRand.
     """
+
     def __init__(self, transforms_list):
         self.transforms = transforms_list
 
