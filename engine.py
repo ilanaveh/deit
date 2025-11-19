@@ -104,11 +104,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             else:
                 if apply_mask:
                     # Create mask:
-                    patch_mask = utils.build_patch_mask(landmarks)
+                    patch_mask = utils.build_patch_mask(landmarks, bb_size=args.landmark_bb_size,
+                                                        thresh_jaccard=args.thresh_jaccard_index)
                     if args.debug_mask:
                         for i in range(len(samples)):
                             utils.visualize_patch_mask(img=samples[i], landmarks=landmarks[i], patch_mask=patch_mask[i],
-                                                       save_fig=True, suf='after_transform', im_id=im_id[i])
+                                                       save_fig=True, im_id=im_id[i],
+                                                       suf=f'after_transform_jaccard{args.thresh_jaccard_index}')
                     # Pass mask to model, to drop all other patches:
                     outputs = model(samples, patch_mask)
                 else:
