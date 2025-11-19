@@ -47,7 +47,7 @@ for model_blur in model_blurs:
 
     model.to(device)
     model.eval()
-    checkpoint = torch.load(os.path.join(model_dir, model_name, 'checkpoint.pth'), map_location='cpu')
+    checkpoint = torch.load(os.path.join(model_dir, model_name, 'best_checkpoint.pth'), map_location='cpu')
     model.load_state_dict(checkpoint['model'])
 
     for test_blur in test_blurs[model_blur]:
