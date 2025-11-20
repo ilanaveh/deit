@@ -264,7 +264,7 @@ def build_patch_mask(landmarks, image_size=224, patch_size=16, bb_size=10, thres
             px2 = (c + 1) * patch_size  # right border of patch (in pixels)
 
             p_bbox = [px1, py1, px2, py2]
-            ptch_bboxs.append(p_bbox)  # ToDo: make sure order of patches here is the same as in mask (used in VitMask)
+            ptch_bboxs.append(p_bbox)
     ptch_bboxs = torch.tensor(ptch_bboxs)
     for i in range(B):  # loop over images in batch
         lnd_bboxs = []
@@ -278,8 +278,11 @@ def build_patch_mask(landmarks, image_size=224, patch_size=16, bb_size=10, thres
         lnd_bboxs = torch.tensor(lnd_bboxs)
 
         # check intersection with each patch:
-        iou_mat = ops.box_iou(ptch_bboxs, lnd_bboxs)
-        idx = iou_mat.max(1).values > thresh_jaccard  # use max, since it's sufficient to have one landmark in a ptach.
+        try:
+            iou_mat = ops.box_iou(ptch_bboxs, lnd_bboxs)
+        except:
+            print('Problem with landmarks of current image (all coordinates out of image) -> No patches selected.')
+        idx = iou_mat.max(1).values > thresh_jaccard  # use max, since it's sufficient to have one landmark in a patch.
         mask[i, idx] = 1.0
 
     return mask  # [B, num_patches]
