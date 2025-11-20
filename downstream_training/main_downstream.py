@@ -231,11 +231,17 @@ def get_args_parser():
                              "Options: eyes, nose, mouth, eyebrows, outline. "
                              "Default: empty list -> no mask (use all patches)")
     parser.add_argument('--debug_mask', action='store_true', help='option to visualize patches that remain after mask')
+    parser.add_argument('--use_ComposeWithMask', action='store_true',
+                        help="automatically set to true if select_patches isn't empty, but can also be manually set "
+                             "here for debugging (i.e. even when all patches are used)")
     parser.add_argument('--landmark_bb_size', type=int, default=10,
                         help="number of pixels around each landmark for bounding-box")
     parser.add_argument('--thresh_jaccard_index', type=float, default=.5,
                         help='Threshold IoU between landmark bounding-box & patch, for including patch.'
                              '0: any intersection is enough. 0.5 is a standard choice.')
+
+    parser.add_argument('--debug', action='store_true',
+                        help='For using smaller datasets. True if: called in args AND device_count=1')
     return parser
 
 
@@ -245,7 +251,7 @@ def main(args):
     print(args)
 
     device = torch.device(args.device)
-    args.debug = torch.cuda.device_count() == 1
+    args.debug = (torch.cuda.device_count() == 1) and args.debug
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
@@ -258,6 +264,7 @@ def main(args):
     n_ptch = len(args.select_patches)
 
     args.get_landmarks = bool(args.select_patches)  # for build_dataset
+    args.use_ComposeWithMask = args.use_ComposeWithMask or bool(args.select_patches)
     # Change model name to format:
     #   "finetune_deit_model_blur{deit_model_training_blur}_affectnet_blur{affectnet_training_blur}_{suf}"
     # If starting from original pretrained deit (i.e. args.deit_model_name=None):
@@ -270,7 +277,12 @@ def main(args):
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
     args.model_name = args.model_name + '_unbalanced' if not args.balance_clss else args.model_name
-    args.model_name = args.model_name + '_{}ptch'.format(n_ptch) if bool(args.select_patches) else args.model_name
+    if bool(args.select_patches):
+        args.model_name = args.model_name + '_{}ptch'.format(n_ptch)
+    elif args.use_ComposeWithMask:
+        args.model_name = args.model_name + '_debug_transforms'
+    else:
+        args.model_name = args.model_name
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     print(f"~~~\n{args.model_name}\n~~~")
