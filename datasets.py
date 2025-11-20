@@ -236,7 +236,7 @@ def build_transform(is_train, args):
 
         # ToDo: ComposeWithMask is redundant (if not doing transforms on landmarks) --> just filter out geometrical
         #  transforms here instead.
-        if ('get_landmarks' in args) and args.get_landmarks:
+        if ('use_ComposeWithMask' in args) and args.use_ComposeWithMask:
             return ComposeWithMask(transform.transforms)
 
         return transform
@@ -253,7 +253,7 @@ def build_transform(is_train, args):
     t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
     # ToDo: ComposeWithMask is redundant (if not doing transforms on landmarks) --> just filter out geometrical
     #  transforms here instead.
-    if ('get_landmarks' in args) and args.get_landmarks:
+    if ('use_ComposeWithMask' in args) and args.use_ComposeWithMask:
         return ComposeWithMask(t)
 
     return transforms.Compose(t)
