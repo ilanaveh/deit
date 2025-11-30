@@ -146,15 +146,15 @@ def get_args_parser():
 
     # * Mixup params
     # 18/11/25: disable mixup
-    parser.add_argument('--mixup', type=float, default=0,
-                        help='mixup alpha, mixup enabled if > 0. (default: 0)')
-    parser.add_argument('--cutmix', type=float, default=0,
-                        help='cutmix alpha, cutmix enabled if > 0. (default: 0)')
+    parser.add_argument('--mixup', type=float, default=0.8,
+                        help='mixup alpha, mixup enabled if > 0. (default: 0.8)')
+    parser.add_argument('--cutmix', type=float, default=1.0,
+                        help='cutmix alpha, cutmix enabled if > 0. (default: 1.0)')
     parser.add_argument('--cutmix-minmax', type=float, nargs='+', default=None,
                         help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
-    parser.add_argument('--mixup-prob', type=float, default=0,
+    parser.add_argument('--mixup-prob', type=float, default=1.0,
                         help='Probability of performing mixup or cutmix when either/both is enabled')
-    parser.add_argument('--mixup-switch-prob', type=float, default=0,
+    parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
                         help='Probability of switching to cutmix when both mixup and cutmix enabled')
     parser.add_argument('--mixup-mode', type=str, default='batch',
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
@@ -264,7 +264,7 @@ def main(args):
     n_ptch = len(args.select_patches)
 
     args.get_landmarks = bool(args.select_patches)  # for build_dataset
-    args.use_ComposeWithMask = args.use_ComposeWithMask or bool(args.select_patches)
+    # args.use_ComposeWithMask = args.use_ComposeWithMask or bool(args.select_patches)
     # Change model name to format:
     #   "finetune_deit_model_blur{deit_model_training_blur}_affectnet_blur{affectnet_training_blur}_{suf}"
     # If starting from original pretrained deit (i.e. args.deit_model_name=None):
@@ -278,11 +278,11 @@ def main(args):
     args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
     args.model_name = args.model_name + '_unbalanced' if not args.balance_clss else args.model_name
     if bool(args.select_patches):
-        args.model_name = args.model_name + '_{}ptch'.format(n_ptch)
-    elif args.use_ComposeWithMask:
-        args.model_name = args.model_name + '_debug_transforms'
+        args.model_name += '_{}ptch'.format(n_ptch)
+    if args.use_ComposeWithMask:
+        args.model_name += '_rmv_transforms'
     else:
-        args.model_name = args.model_name
+        args.model_name += '_nrml_transforms'
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     print(f"~~~\n{args.model_name}\n~~~")
