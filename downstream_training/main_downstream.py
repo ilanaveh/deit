@@ -168,13 +168,16 @@ def get_args_parser():
     # Dataset parameters
     parser.add_argument('--data-path', default='/home/projects/bagon/ilanaveh/data/AffectNet', type=str,
                         help='dataset path')
-    parser.add_argument('--data-set', default='Affectnet', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19', 'Affectnet'],
+    parser.add_argument('--data-set', default='Affectnet',
+                        choices=['CIFAR', 'IMNET', 'INAT', 'INAT19', 'Affectnet', 'CelebA'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--desired_classes', default=[0, 1, 2, 3, 4, 5, 6, 7], type=int, nargs='+',
                         help='0: Neutral, 1: Happiness, 2: Sadness, 3: Surprise, 4: Fear, 5: Disgust, 6: Anger, '
                              '7: Contempt, 8: None, 9: Uncertain, 10: No-Face.ToDo: decide which classes I want.')
     parser.add_argument('--balance_clss', action='store_true',
                         help='whether to take the same number of images from each class (relevant for Affectnet)')
+    parser.add_argument('--attribute', default='Male', type=str,
+                        help='choose from CelebA Attributes (Male, Smiling, Young')
     parser.add_argument('--inat-category', default='name',
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
                         type=str, help='semantic granularity')
@@ -260,7 +263,7 @@ def main(args):
 
     cudnn.benchmark = True
 
-    n_cls = len(args.desired_classes)
+    n_cls = len(args.desired_classes) if args.data_set == 'Affectnet' else 2
     n_ptch = len(args.select_patches)
 
     args.get_landmarks = bool(args.select_patches)  # for build_dataset
@@ -273,21 +276,26 @@ def main(args):
     deit_model_blur = args.deit_model_name.split('blur')[1].split('_')[0] if args.deit_model_name else ''
     args.model_name = f"finetune_deit_model_blur{deit_model_blur}" \
         if args.deit_model_name else "finetune_deit_model_original"
-    args.model_name = args.model_name + '_affectnet_blur{}'.format(args.blur)
+    args.model_name = args.model_name + '_affectnet_blur{}'.format(args.blur) if args.data_set == 'Affectnet' \
+        else args.model_name + '_celeba_blur{}'.format(args.blur)
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
-    args.model_name = args.model_name + '_unbalanced' if not args.balance_clss else args.model_name
+    args.model_name = args.model_name + '_unbalanced' if (args.data_set == 'Affectnet' and not args.balance_clss)\
+        else args.model_name
     if bool(args.select_patches):
         args.model_name += '_{}ptch'.format(n_ptch)
     if args.use_ComposeWithMask:
         args.model_name += '_rmv_transforms'
-    else:
+    elif args.data_set == 'Affectnet':
         args.model_name += '_nrml_transforms'
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     print(f"~~~\n{args.model_name}\n~~~")
 
-    output_dir = Path(args.output_dir) / args.model_name
+    if args.data_set == 'CelebA':  # ToDo: after current affectnet jobs finish, delete conditional (always add  args.data_set to path)
+        output_dir = Path(args.output_dir) / args.data_set / args.model_name
+    else:
+        output_dir = Path(args.output_dir) / args.model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
     # For adding mask to patches (according to facial landmarks):
@@ -303,7 +311,10 @@ def main(args):
     if bool(args.select_patches):
         print(f"Selected patches: {args.select_patches}")
 
-    print(f"=> Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
+    if args.data_set == 'Affectnet':
+        print(f"=> Creating dataset: {args.data_set}, with {n_cls} classes: {args.desired_classes}")
+    else:
+        print(f"=> Creating dataset: {args.data_set}")
     print("Train Dataset:")
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
 
