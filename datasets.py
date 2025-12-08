@@ -18,6 +18,7 @@ import torch  # for setting seed
 from collections import Counter
 from PIL import Image, ImageDraw
 from scipy import ndimage
+import pandas as pd
 import sys
 
 sys.path.append("/home/projects/bagon/ilanaveh/code/Transformers/deit")  # for importing utils
@@ -65,6 +66,39 @@ class INatDataset(ImageFolder):
             self.samples.append((path_current, target_current_true))
 
     # __getitem__ and __len__ inherited from ImageFolder
+
+
+class CelebaDataset(ImageFolder):
+    def __init__(self, root, transform=None, target_transform=None, attribute='Male', is_train=True):
+        self.class_to_idx = {-1: 0, 1: 1}
+        self.attribute = attribute
+        self.is_train = is_train
+        self.train_to_partition = {True: 0, False: 1}
+        super().__init__(root, loader=default_loader, transform=transform, target_transform=target_transform)
+
+    def make_dataset(self, directory, class_to_idx=None, extensions=None, is_valid_file=None):
+        directory = os.path.expanduser(directory)
+        images_path = os.path.join(directory, 'Img', 'img_align_celeba')
+        ann_path = os.path.join(directory, 'Anno', 'list_attr_celeba.txt')
+        partition_path = os.path.join(directory, 'Anno', 'list_eval_partition.csv')
+        ann_df = pd.read_csv(ann_path, sep=r"\s+", skiprows=1)
+        partition_df = pd.read_csv(partition_path)
+        des_partition = self.train_to_partition[self.is_train]
+
+        instances = []
+
+        for (i, img) in enumerate(os.listdir(images_path)):
+            if img.lower().endswith(extensions) \
+                    and partition_df['partition'][partition_df['image_id'] == img].item() == des_partition:
+                ann = int(ann_df[self.attribute][img])
+                path = os.path.join(images_path, img)
+                instances.append((path, self.class_to_idx[ann]))
+
+        cnt_anns = Counter([im[1] for im in instances])
+        for ann, v in sorted(cnt_anns.items()):
+            print(f"Number of images from class {ann}: {v}")
+
+        return instances
 
 
 class AffectnetDataset(ImageFolder):
@@ -210,6 +244,11 @@ def build_dataset(is_train, args):
                                    balance_clss=args.balance_clss, debug=args.debug, get_landmarks=args.get_landmarks,
                                    desired_landmarks=args.desired_landmark_inds, save_landmark_figs=args.debug_mask,
                                    get_im_id=args.debug_mask)
+
+    elif args.data_set == 'CelebA':
+        root = args.data_path
+        nb_classes = 2
+        dataset = CelebaDataset(root, transform=transform, attribute=args.attribute, is_train=is_train)
 
     return dataset, nb_classes
 
