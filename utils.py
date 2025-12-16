@@ -280,10 +280,10 @@ def build_patch_mask(landmarks, image_size=224, patch_size=16, bb_size=10, thres
         # check intersection with each patch:
         try:
             iou_mat = ops.box_iou(ptch_bboxs, lnd_bboxs)
+            idx = iou_mat.max(1).values > thresh_jaccard  # use max, since it's sufficient to have one lndmrk in patch.
+            mask[i, idx] = 1.0
         except:
             print('Problem with landmarks of current image (all coordinates out of image) -> No patches selected.')
-        idx = iou_mat.max(1).values > thresh_jaccard  # use max, since it's sufficient to have one landmark in a patch.
-        mask[i, idx] = 1.0
 
     return mask  # [B, num_patches]
 
