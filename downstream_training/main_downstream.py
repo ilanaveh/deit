@@ -277,7 +277,7 @@ def main(args):
     args.model_name = f"finetune_deit_model_blur{deit_model_blur}" \
         if args.deit_model_name else "finetune_deit_model_original"
     args.model_name = args.model_name + '_affectnet_blur{}'.format(args.blur) if args.data_set == 'Affectnet' \
-        else args.model_name + '_celeba_blur{}'.format(args.blur)
+        else args.model_name + '_celeba_{}_blur{}'.format(args.attribute, args.blur)
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
     args.model_name = args.model_name + '_unbalanced' if (args.data_set == 'Affectnet' and not args.balance_clss)\
@@ -292,10 +292,7 @@ def main(args):
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
     print(f"~~~\n{args.model_name}\n~~~")
 
-    if args.data_set == 'CelebA':  # ToDo: after current affectnet jobs finish, delete conditional (always add  args.data_set to path)
-        output_dir = Path(args.output_dir) / args.data_set / args.model_name
-    else:
-        output_dir = Path(args.output_dir) / args.model_name
+    output_dir = Path(args.output_dir) / args.data_set / args.model_name
     output_dir.mkdir(parents=False, exist_ok=True)  # create output_dir if doesn't exist, alert if parent doesn't exist.
 
     # For adding mask to patches (according to facial landmarks):
