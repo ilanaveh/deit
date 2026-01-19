@@ -248,19 +248,31 @@ class LinearClsHead(nn.Layer):
         return cls_score
 
 
-class APViT(nn.Layer):
-    """Attentive Pooling ViT"""
+class APDeiT(nn.Layer):
+    """Attentive Pooling DeiT (Based on Attentive Pooling ViT - APViT.Paddle.ppcls.arch.backbone.model_zoo.apvit"""
 
     def __init__(self, class_num=7):
         super().__init__()
         self.extractor = IRSEV2(input_size=(112, 112), num_layers=44, mode='ir', return_index=(2,))
-        self.vit = PoolingViT(input_type='feature', num_patches=196,
-            embed_dim=768, depth=8, num_heads=8, mlp_ratio=3, qkv_bias=False, norm_layer_eps=1e-06,
-            in_channels=[256],
-            attn_method='SUM_ABS_1',    # CNN Attention method， SUM_ABS_1
-            cnn_pool_config=dict(keep_num=160, exclude_first=False),
-            vit_pool_configs=dict(keep_rates=[1.] * 6 + [0.9] * 6, exclude_first=True, attn_method='SUM')
-            )
+
+        # Replace "self.vit = PoolingVit", with vit definition copied from deit/models/deit_base_patch16_224().
+        # Later on, I might want to add pooiling layers to vit ("APP"; currently - focus on adding IRSE backbone).
+        # ToDo: decide which value to give arguments that are different between the apvit & deit vit definitions: depth
+        #  (8 in apvit and 12 in deit), num_heads (8 in apvit and 12 in deit), mlp_ratio (3 in apvit and 4 in deit),
+        #  kqv_bias (False in apvit and True in deit)
+        self.vit = VisionTransformer(patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+                                     norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        self.vit.default_cfg = _cfg()
+
+        # ViT defenition from apvit:
+        # PoolingViT(input_type='feature', num_patches=196,
+        # embed_dim=768, depth=8, num_heads=8, mlp_ratio=3, qkv_bias=False, norm_layer_eps=1e-06,
+        # in_channels=[256],
+        # attn_method='SUM_ABS_1',    # CNN Attention method， SUM_ABS_1
+        # cnn_pool_config=dict(keep_num=160, exclude_first=False),
+        # vit_pool_configs=dict(keep_rates=[1.] * 6 + [0.9] * 6, exclude_first=True, attn_method='SUM')
+        # )
+
         self.head = LinearClsHead(num_classes=class_num, in_channels=768)
         # load_pretrain
         data = torch.load('weights/ir.pdparams')
