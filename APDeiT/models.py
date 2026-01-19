@@ -211,6 +211,72 @@ class IRSEV2(nn.Layer):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
+# Modules from APViT/Paddle/ppcls/arch/backbone/model_zoo/apvit.py:
+class LinearClsHead(nn.Layer):
+    """Linear classifier head.
+
+    Args:
+        num_classes (int): Number of categories excluding the background
+            category.
+        in_channels (int): Number of channels in the input feature map.
+        loss (dict): Config of classification loss.
+    """
+
+    def __init__(self, num_classes, in_channels):
+        super().__init__()
+        self.in_channels = in_channels
+        self.num_classes = num_classes
+        # self.loss = nn.CrossEntropyLoss()
+        if self.num_classes <= 0:
+            raise ValueError(
+                f'num_classes={num_classes} must be a positive integer')
+        self._init_layers()
+
+    def _init_layers(self):
+        self.fc = nn.Linear(self.in_channels, self.num_classes, weight_attr=nn.initializer.Constant(value=0.))
+
+    # def init_weights(self):
+    #     constant_init(self.fc, val=0, bias=0)
+
+    def forward(self, x, gt_label=None):
+        cls_score = self.fc(x)
+        # if gt_label is not None:
+        #     losses = self.loss(cls_score, gt_label)
+        #     return losses
+        # else:
+        #     return cls_score
+        return cls_score
+
+
+class APViT(nn.Layer):
+    """Attentive Pooling ViT"""
+
+    def __init__(self, class_num=7):
+        super().__init__()
+        self.extractor = IRSEV2(input_size=(112, 112), num_layers=44, mode='ir', return_index=(2,))
+        self.vit = PoolingViT(input_type='feature', num_patches=196,
+            embed_dim=768, depth=8, num_heads=8, mlp_ratio=3, qkv_bias=False, norm_layer_eps=1e-06,
+            in_channels=[256],
+            attn_method='SUM_ABS_1',    # CNN Attention method， SUM_ABS_1
+            cnn_pool_config=dict(keep_num=160, exclude_first=False),
+            vit_pool_configs=dict(keep_rates=[1.] * 6 + [0.9] * 6, exclude_first=True, attn_method='SUM')
+            )
+        self.head = LinearClsHead(num_classes=class_num, in_channels=768)
+        # load_pretrain
+        data = torch.load('weights/ir.pdparams')
+        self.extractor.set_state_dict(data)
+        data = torch.load('weights/vit.pdparams')
+        self.vit.set_state_dict(data)
+
+    def forward(self, img, gt_label=None):
+        x = self.extractor(img)
+        x = self.vit(x)
+        x = self.head(x, gt_label)
+        return x
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
 # Add register_model for APDeit: copy 'deit_base_patch16_224' from deit/models
 @register_model
 def deit_base_patch16_224(pretrained=False, **kwargs):
