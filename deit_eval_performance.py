@@ -3,11 +3,14 @@
 For meeting with Udi and Danny.
 Evaluate performance of different models with different test-blurs.
 Based on main_tmp.py
+
+25/2/26
+Add option to write results to file.
 """
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
 import argparse
-import datetime
+from datetime import date
 import numpy as np
 import time
 import torch
@@ -210,6 +213,13 @@ def get_args_parser():
 
     # suffix for model name
     parser.add_argument('--suf', default='', type=str, help='suffix for model name (would be added with "_"')
+
+    # write results to file:
+    parser.add_argument('--write2file', action='store_true')
+    parser.add_argument('--out_pth', default='/home/projects/bagon/ilanaveh/code/Transformers/deit/'
+                                             'out_from_eval_performance/deit_eval_results.txt', type=str,
+                        help='Path to text file, where results should be appended. Relevant only if args.write2file=True')
+
     return parser
 
 
@@ -300,6 +310,11 @@ def main(args):
 
         print(f"Accuracy of the model {args.deit_model_name} on the {len(dataset_val)} test images with blur "
               f"{args.blur}: {test_stats['acc1']:.1f}%")
+
+        if args.write2file:
+            with open(os.path.join(args.out_pth), "a", encoding="utf-8") as f:
+                f.write(f"blur: {args.blur}, "
+                        f"performance: {test_stats['acc1']:.1f}%.\n")
 
         return
 
