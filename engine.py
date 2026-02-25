@@ -44,9 +44,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         if len(sample) == 2:
             samples, targets = sample
         elif len(sample) == 3:
-            if bool(args.blur_max):
+            if len(sample[2].shape) == 1:
                 # 3rd argument is 'applied_blurs' (in main_tmp, if bool(args.blur_max) => CustomCompose is used)
-                samples, targets, applied_blurs = sample
+                samples, targets, applied_blurs = sample  # applied_blurs: tensor of shape [B]
                 applied_blurs_all += applied_blurs.tolist()
             else:
                 # 3rd argument is 'landmarks' (relevant only for downstream training)
@@ -54,7 +54,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                 apply_mask = True
         elif len(sample) == 4:
             apply_mask = True
-            if bool(args.blur_max):
+            if len(sample[2].shape) == 1:
                 # applied_blurs + landmarks are returned (entails we're in downstream training + variable-blur.
                 samples, targets, applied_blurs, landmarks = sample
             else:
@@ -109,7 +109,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     if args.debug_mask:
                         for i in range(len(samples)):
                             utils.visualize_patch_mask(img=samples[i], landmarks=landmarks[i], patch_mask=patch_mask[i],
-                                                       save_fig=True, im_id=im_id[i],
+                                                       save_fig=False, im_id=im_id[i],
                                                        suf=f'after_transform_jaccard{args.thresh_jaccard_index}')
                     # Pass mask to model, to drop all other patches:
                     outputs = model(samples, patch_mask)
@@ -217,7 +217,7 @@ def evaluate(data_loader, model, device, return_breakdown=False, des_classes=Non
                 if args.debug_mask:
                     for i in range(len(images)):
                         utils.visualize_patch_mask(img=images[i], landmarks=landmarks[i], patch_mask=patch_mask[i],
-                                                   save_fig=True, im_id=im_id[i],
+                                                   save_fig=False, im_id=im_id[i],
                                                    suf=f'after_transform_jaccard{args.thresh_jaccard_index}')
                 # Pass mask to model, to drop all other patches:
                 output = model(images, patch_mask)
