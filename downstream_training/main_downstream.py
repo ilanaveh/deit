@@ -280,13 +280,14 @@ def main(args):
         else args.model_name + '_celeba_{}_blur{}'.format(args.attribute, args.blur)
     args.model_name = args.model_name + '-{}'.format(args.blur_max) if args.blur_max else args.model_name
     args.model_name = args.model_name + '_{}cls'.format(n_cls) if (n_cls > 2) else args.model_name
+    args.model_name = args.model_name + '_attn_only' if args.attn_only else args.model_name
     args.model_name = args.model_name + '_unbalanced' if (args.data_set == 'Affectnet' and not args.balance_clss)\
         else args.model_name
     if bool(args.select_patches):
         args.model_name += '_{}ptch'.format(n_ptch)
     if args.use_ComposeWithMask:
         args.model_name += '_rmv_transforms'
-    elif args.data_set == 'Affectnet':
+    elif args.data_set == 'Affectnet' and bool(args.select_patches):
         args.model_name += '_nrml_transforms'
     args.model_name = args.model_name + '_{}'.format(args.suf) if args.suf else args.model_name
     args.model_name = args.model_name + '_db' if (torch.cuda.device_count() == 1) else args.model_name
@@ -432,6 +433,29 @@ def main(args):
 
         with (output_dir / "log.txt").open("a") as f:
             f.write(f"Starting from deit model: '{deit_model_path}', epoch: {deit_checkpoint['epoch']}" + "\n")
+
+    if args.attn_only:
+        print('Leaving only attention layers open.')
+        for name_p, p in model.named_parameters():
+            if '.attn.' in name_p:
+                p.requires_grad = True
+            else:
+                p.requires_grad = False
+        try:
+            model.head.weight.requires_grad = True
+            model.head.bias.requires_grad = True
+        except:
+            model.fc.weight.requires_grad = True
+            model.fc.bias.requires_grad = True
+        try:
+            model.pos_embed.requires_grad = True
+        except:
+            print('no position encoding')
+        try:
+            for p in model.patch_embed.parameters():
+                p.requires_grad = False
+        except:
+            print('no patch embed')
 
     model_ema = None
     if args.model_ema:
