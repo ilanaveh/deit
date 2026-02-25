@@ -429,7 +429,7 @@ class BlurDataset(ImageFolder):
             # remove blur transform:
             transform_tchr = transforms.Compose(self.transform.transforms[1:]) if blur_in_transforms else self.transform
             assert isinstance(transform_tchr.transforms[0], RandomResizedCropAndInterpolation)
-            # Set seed, so teacher and student samples would go through same transforms:
+            # Set seed, so teacher and student samples would go through same transforms: ToDo: validate this.
             set_seed(seed)
             # apply transforms to sample:
             sample_tchr = transform_tchr(sample)
