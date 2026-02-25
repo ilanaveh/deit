@@ -424,8 +424,11 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
+        print("Using torch.nn.parallel.DistributedDataParallel.")
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         model_without_ddp = model.module
+    else:
+        print("Not using torch.nn.parallel.DistributedDataParallel.")
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
     if not args.unscale_lr:
