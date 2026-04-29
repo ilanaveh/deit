@@ -2,9 +2,11 @@ import json
 import os
 import os.path as osp
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import torch
 from collections import defaultdict
 import numpy as np
+import re
 
 
 def read_log_file(filepath):
@@ -16,14 +18,16 @@ def read_log_file(filepath):
 def get_epoch_acc(log_data, epoch, mdl, test_blur):
     for epoch_data in log_data:
         if epoch_data['epoch'] == epoch:
-            if 'deit_blur0-32' in mdl:
-                if test_blur == 'min':
-                    acc1_key = 'test_acc1'
-                    test_blur_sigma = 0
-                else:
-                    acc1_key = 'test_blur_max_acc1'
-                    test_blur_sigma = 32
-            elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl) or ('deit_blur0-8' in mdl):
+            # if 'deit_blur0-32' in mdl:
+            #     if test_blur == 'min':
+            #         acc1_key = 'test_acc1'
+            #         test_blur_sigma = 0
+            #     else:
+            #         acc1_key = 'test_blur_max_acc1'
+            #         test_blur_sigma = 32
+            # # elif ('deit_blur0-16' in mdl) or ('deit_blur16-32' in mdl) or ('deit_blur0-8' in mdl):
+            # el
+            if re.search(r'deit_blur\d+-\d+', mdl):
                 blur_min = mdl.split('-')[0].split('blur')[1]
                 blur_max = mdl.split('-')[1].split('_')[0]
                 blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
@@ -59,6 +63,7 @@ model_out_dict = {
     'deit_blur16-32_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'deit_blur0-8_tmp': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
     'deit_blur0-8_rep': osp.join('out', 'jobs_from_scratch_main_tmp_code'),
+    'deit_blur0-8_BS128': osp.join('out', 'jobs_after_adding_seed'),
     'original': 'out',
     'deit_blur4': 'out',
     'deit_blur8': 'out',
@@ -67,34 +72,85 @@ model_out_dict = {
     'deit_blur0-32_tmp': 'out',
     'deit_blur4_rep': 'out',
     'deit_blur0_tchr_deit-high-res_hard': osp.join('out', 'distillation_jobs'),
+    'deit_blur0_tchr_preRes-blur0_hard': osp.join('out', 'distillation_jobs'),
     'deit_blur0_tchr_RegNetY-160_hard': osp.join('out', 'distillation_jobs'),
     'deit_blur0-8_tchr_RegNetY-160_hard': osp.join('out', 'distillation_jobs'),
     'deit_blur0-16_tchr_deit-high-res_hard': osp.join('out', 'distillation_jobs'),
     'deit_blur0-16_tchr_RegNetY-160_hard': osp.join('out', 'distillation_jobs'),
     'deit_blur16_tchr_RegNetY-160_hard': osp.join('out', 'distillation_jobs'),
-    'deit_blur16_tchr_RegNetY-160_hard_rep': osp.join('out', 'distillation_jobs')
+    'deit_blur16_tchr_RegNetY-160_hard_rep': osp.join('out', 'distillation_jobs'),
+    'deit_blur16_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur0-16_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur0-32_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur0-8_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur0_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur0_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur8_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur16_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur32_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur0-16_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur0-32_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur8_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur32_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur8_tchr_preRes-blur8_hard': osp.join('out', 'distillation_jobs'),
+    'deit_blur16_tchr_preRes-blur16_hard': osp.join('out', 'distillation_jobs'),
+    'deit_blur8_tchr_preRes-blur8_hard_rep': osp.join('out', 'distillation_jobs'),
+    'deit_blur16_tchr_preRes-blur16_hard_rep': osp.join('out', 'distillation_jobs'),
+    'deit_blur2_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur4_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur0-2_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur0-4_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur2_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur4_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur0-2_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur0-4_tchr_RegNetY-160_hard_BS128': osp.join('out', 'distillation_jobs'),
+    'deit_blur8-16_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur16-32_BS128': osp.join('out', 'jobs_after_adding_seed'),
+    'deit_blur12_BS128': osp.join('out', 'jobs_after_adding_seed'),
 }
 
 # Create a function to get the appropriate color based on model name
+# The variable-blur models need to be first (otherwise, the 'blur0' would be considered as the correct key)
 color_map = {
     'blur0-32': 'green',
-    'blur0-16': 'magenta',
+    'blur0-16': 'red',
+    'blur8-16': 'brown',
+    # 'blur16-32': 'cadetblue',
     'blur16-32': 'olive',
     'blur0-8': 'orange',
-    'blur0': 'cyan',
-    'original': 'cyan',
-    'blur2': 'green',
-    'blur4': 'red',
+    'blur0-8_BS128': 'orange',
+    'blur0-2': 'black',
+    'blur0-4': 'blue',
+    'blur0': 'mediumpurple',
+    'original': 'mediumpurple',
     'blur6': 'black',
     'blur8': 'gold',
     'blur16': 'pink',
     'blur32': 'limegreen',
-    'blur0_tchr_deit-high-res': 'blue',
-    'blur0_tchr_RegNetY-160': 'blue',
-    'blur0-8_tchr_RegNetY-160': 'darkgoldenrod',
-    'blur0-16_tchr_deit-high-res': 'red',
+    'blur0_tchr_deit-high-res': 'mediumpurple',  # used to be 'blue' (before adding dashed for teacher)
+    'blur0_tchr_RegNetY-160': 'mediumpurple',
+    'blur0_tchr_RegNetY-160_BS128': 'mediumpurple',
+    'blur0_tchr_preRes-blur0': 'mediumpurple',
+    'blur0-8_tchr_RegNetY-160': 'orange',  # used to be 'darkgoldenrod'
+    'blur0-8_tchr_RegNetY-160_BS128': 'orange',
+    'blur8_tchr_RegNetY-160_BS128': 'gold',
+    'blur8_tchr_preRes-blur8': 'gold',
+    'blur0-16_tchr_deit-high-res': 'red',  # used to be 'purple'
     'blur0-16_tchr_RegNetY-160': 'red',
-    'blur16_tchr_RegNetY-160': 'purple'
+    'blur0-16_tchr_RegNetY-160_BS128': 'red',
+    'blur16_tchr_RegNetY-160': 'pink',  # used to be 'magenta'
+    'blur16_tchr_preRes-blur16': 'pink',
+    'blur16_tchr_RegNetY-160_BS128': 'pink',
+    'blur32_tchr_RegNetY-160_BS128': 'limegreen',
+    'blur0-32_tchr_RegNetY-160_BS128': 'green',
+    'blur2': 'grey',
+    'blur2_tchr_RegNetY-160_BS128': 'grey',
+    'blur0-2_tchr_RegNetY-160_BS128': 'black',
+    'blur4': 'cyan',
+    'blur4_tchr_RegNetY-160_BS128': 'cyan',
+    'blur0-4_tchr_RegNetY-160_BS128': 'blue',
+    'blur0-4_tchr_RegNetY-160_BS128': 'blue',
+    'blur12': 'blue',
 }
 # More colors I can add: 'teal', 'navy', 'gold', 'coral', 'indigo', 'turquoise'
 
@@ -104,21 +160,24 @@ def get_color_for_model(model_name):
         return color_map[model_name.replace('deit_', '').replace('_hard', '').replace('_rep', '')]
     for blur_level in color_map.keys():
         if blur_level in model_name:
+            # if 'BS128' in model_name:
+            #     return [np.max([c - .3, 0]) for c in colors.to_rgb(color_map[blur_level])]
             return color_map[blur_level]
     return 'gray'  # Default color if no match is found
 
 
-def plot_metric(models, metrics, test_blur):
+def plot_metric(models, metrics, test_blur, ls_dict={}):
     """
 
     :param models: list of model names (should match the directory names in '/out')
     :param metrics: name of metric to plot / list of four.
     :param test_blur: either 'max' or 'min' - which test-blur to plot (relevant to var_blur models).
+    :param ls_dict: keys: substring (in model name), values: linestyle (e.g. '--', ':').
 
     :return:
     """
 
-    plt.figure(figsize=(4.5, 3))
+    plt.figure(figsize=(10, 6))
     # Initialize a set to keep track of which blur levels have been added to the legend
     legend_added = set()
 
@@ -128,15 +187,18 @@ def plot_metric(models, metrics, test_blur):
 
         for mdl in models:
             filepath = os.path.join(model_out_dict[mdl], mdl, 'log.txt')
+            filepath = filepath if os.path.exists(filepath) else os.path.join('code/Transformers/deit', filepath)
             if os.path.exists(filepath):
                 log_data = read_log_file(filepath)
                 epochs = [entry['epoch'] for entry in log_data]
-                if ('deit_blur0-32' in mdl) & (test_blur == 'max'):  # if test_blur is 'min', then default is ok.
-                    values = [entry[metric.replace('_', '_blur_max_')] for entry in log_data]
-                elif ('deit_blur0-16' in mdl) \
-                        or ('deit_blur16-32' in mdl) \
-                        or ('deit_blur0-32_rep' in mdl)\
-                        or ('deit_blur0-8' in mdl):
+                # if ('deit_blur0-32' in mdl) & (test_blur == 'max'):  # if test_blur is 'min', then default is ok.
+                #     values = [entry[metric.replace('_', '_blur_max_')] for entry in log_data]
+                # if ('deit_blur0-16' in mdl) \
+                #         or ('deit_blur16-32' in mdl) \
+                #         or ('deit_blur0-32' in mdl)\
+                #         or ('deit_blur0-32_rep' in mdl)\
+                #         or ('deit_blur0-8' in mdl):
+                if re.search(r"deit_blur\d+-\d+", mdl):
                     blur_min = mdl.split('-')[0].split('blur')[1]
                     blur_max = mdl.split('-')[1].split('_')[0]
                     blur2plt = blur_max if (test_blur == 'max') else blur_min if (test_blur == 'min') else -1
@@ -144,18 +206,32 @@ def plot_metric(models, metrics, test_blur):
                 else:
                     values = [entry[metric] for entry in log_data]
                 color = get_color_for_model(mdl)
-                plt.plot(epochs, values, linestyle='-', color=color)
+                ls = '-'  # default
+                lw = 1.5
+                for sub_string, line_style in ls_dict.items():
+                    if sub_string in mdl:
+                        ls = line_style
+                        if ls == ':':
+                            lw = 2.5
+                plt.plot(epochs, values, linestyle=ls, color=color, linewidth=lw)
                 if 'original' in mdl:
                     blur_level = 'blur0'
                 elif 'tchr' in mdl:
                     blur_level = mdl.strip('deit_')
                 else:
                     blur_level = next((blur for blur in color_map.keys() if blur in mdl), None)
-                if blur_level and (blur_level not in legend_added):
+                if blur_level and (color not in legend_added):
                     plt.plot([], [], color=color, label=blur_level)  # Add empty plot for legend
-                    legend_added.add(blur_level)
+                    legend_added.add(color)
             else:
                 print(f"Log file not found in directory: {mdl}")
+
+        # Add line styles to legend:
+        num2add = 0  # how many entries were added to the legend, beyond 'legend_added' (used for # columns in legend)
+        for sub_string, line_style in ls_dict.items():
+            if any([sub_string in m for m in models]):
+                plt.plot([], [], linestyle=line_style, color='gray', label=sub_string)  # Add empty plot for legend
+                num2add += 1
 
         plt.xlabel('Epoch')
         if metric == 'test_acc1':
@@ -163,8 +239,8 @@ def plot_metric(models, metrics, test_blur):
         plt.grid(True)
         ax = plt.gca()
         ax.set_position([.125, .15, .8, .8])
-
-    plt.legend(title='Model')
+    nrows = 3
+    plt.legend(title='Model', ncol=np.ceil((len(legend_added)+num2add) / nrows))
 
 
 def get_gen_mdl_name(strings):
@@ -197,7 +273,7 @@ def plot_bars(models, test_blur):
     If there was more than one repetition, each bar represents the mean & the error bars - the std.
     """
 
-    f, ax = plt.subplots(figsize=(5, 3))
+    f, ax = plt.subplots(figsize=(10, 6))
 
     # Step 1: Group accuracies and model names by color
     color_to_accs = defaultdict(list)
@@ -206,13 +282,16 @@ def plot_bars(models, test_blur):
 
     for mdl in models:
         filepath = os.path.join(model_out_dict[mdl], mdl, 'log.txt')
-        best_cp_pth = os.path.join(model_out_dict[mdl], mdl, 'best_checkpoint.pth')
+        filepath = filepath if os.path.exists(filepath) else os.path.join('code/Transformers/deit', filepath)
         if os.path.exists(filepath):
+            best_cp_pth = filepath.replace('log.txt', 'best_checkpoint.pth')
             log_data = read_log_file(filepath)
             best_cp = torch.load(best_cp_pth)
             best_epoch = best_cp['epoch']
             acc, test_bl_sig = get_epoch_acc(log_data, best_epoch, mdl, test_blur)
             color = get_color_for_model(mdl)
+            if 'tchr' in mdl:
+                color += '_tchr'
             color_to_accs[color].append(acc)
             color_to_names[color].append(mdl)
             color_to_tst_sig[color] = test_bl_sig
@@ -227,16 +306,21 @@ def plot_bars(models, test_blur):
     tst_sigmas = []
 
     for color, accs in color_to_accs.items():
-        colors.append(color)
+        colors.append(color.replace('_tchr', ''))
         means.append(np.mean(accs))
         stds.append(np.std(accs) if (len(accs) > 1) else np.nan)
         group_label = get_gen_mdl_name(color_to_names[color])
-        x_labels.append(group_label if group_label else "blur0")  # One of the blur0 models is named 'original', so no common prefix would be found.
+        # lbl = (group_label if group_label else "blur0") if 'tchr' not in color else (group_label+'+Tchr')  # One of the blur0 models is named 'original', so no common prefix would be found.
+        lbl = group_label if group_label else "blur0"  # One of the blur0 models is named 'original', so no common prefix would be found.
+        x_labels.append(lbl)
         tst_sigmas.append(color_to_tst_sig[color])
 
     # Step 3: Plot the bars with error bars
     x = np.arange(len(means))
-    bars = ax.bar(x, means, yerr=stds, color=colors, capsize=5, zorder=3)
+    if np.any([not np.isnan(s) for s in stds]):
+        bars = ax.bar(x, means, yerr=stds, color=colors, capsize=5, zorder=3)
+    else:
+        bars = ax.bar(x, means, color=colors, capsize=5, zorder=3)
 
     # Add labels:
     ax.bar_label(bars, labels=[f"{m:.1f}" for m in means], padding=3, fontsize=9)
@@ -288,16 +372,80 @@ if __name__ == "__main__":
     models_cleaner_fig = [
         'deit_blur0_tmp_new', 'original', 'deit_blur0_tchr_RegNetY-160_hard',
         'deit_blur8', 'deit_blur8_rep',
-        'deit_blur0-8_tmp', 'deit_blur0-8_rep',
+        'deit_blur0-8_tmp', 'deit_blur0-8_rep', 'deit_blur0-8_tchr_RegNetY-160_hard_BS128',
         'deit_blur16', 'deit_blur16_tmp_new',
         'deit_blur16_tchr_RegNetY-160_hard',  'deit_blur16_tchr_RegNetY-160_hard_rep',
+        'deit_blur16_tchr_RegNetY-160_hard_BS128',
         'deit_blur0-16_tmp_fix_bug', 'deit_blur0-16_rep', 'deit_blur0-16_tchr_RegNetY-160_hard',
+        'deit_blur0-16_tchr_RegNetY-160_hard_BS128',
         'deit_blur32', 'deit_blur32_tmp_new',
         'deit_blur0-32_tmp', 'deit_blur0-32_tmp_new',
 
     ]
 
+    models_comp_BS128 = [
+        'deit_blur0_tmp_new', 'original',
+        'deit_blur0_BS128',
+        'deit_blur8', 'deit_blur8_rep',
+        'deit_blur8_BS128',
+        'deit_blur16', 'deit_blur16_tmp_new',
+        'deit_blur16_BS128',
+        'deit_blur0-16_tmp_fix_bug', 'deit_blur0-16_rep',
+        'deit_blur0-16_BS128'
+
+    ]
+
+    models_all_BS128 = [
+        'deit_blur0_BS128', 'deit_blur0_tchr_RegNetY-160_hard_BS128',
+        'deit_blur8_BS128',
+        'deit_blur0-8_BS128', 'deit_blur0-8_tchr_RegNetY-160_hard_BS128',
+        'deit_blur16_BS128', 'deit_blur16_tchr_RegNetY-160_hard_BS128',
+        'deit_blur0-16_BS128', 'deit_blur0-16_tchr_RegNetY-160_hard_BS128',
+    ]
+
+    models_seed = [
+        'deit_blur0_BS128', 'deit_blur0_tchr_RegNetY-160_hard_BS128',
+        # 'deit_blur2_BS128', 'deit_blur2_tchr_RegNetY-160_hard_BS128',
+        # 'deit_blur0-2_BS128', 'deit_blur0-2_tchr_RegNetY-160_hard_BS128',
+        # 'deit_blur4_BS128', 'deit_blur4_tchr_RegNetY-160_hard_BS128',
+        # 'deit_blur0-4_BS128', 'deit_blur0-4_tchr_RegNetY-160_hard_BS128',
+        'deit_blur8_BS128', 'deit_blur8_tchr_RegNetY-160_hard_BS128',
+        'deit_blur0-8_BS128', 'deit_blur0-8_tchr_RegNetY-160_hard_BS128',
+        'deit_blur12_BS128',
+        'deit_blur16_BS128', 'deit_blur16_tchr_RegNetY-160_hard_BS128',
+        'deit_blur8-16_BS128',
+        'deit_blur0-16_BS128', 'deit_blur0-16_tchr_RegNetY-160_hard_BS128',
+        'deit_blur32_BS128', 'deit_blur32_tchr_RegNetY-160_hard_BS128',
+        'deit_blur16-32_BS128',
+        'deit_blur0-32_BS128', 'deit_blur0-32_tchr_RegNetY-160_hard_BS128',
+        # 'deit_blur0_tchr_preRes-blur0_hard',
+        # 'deit_blur8_tchr_preRes-blur8_hard', 'deit_blur16_tchr_preRes-blur16_hard',
+        # 'deit_blur8_tchr_preRes-blur8_hard_rep', 'deit_blur16_tchr_preRes-blur16_hard_rep'
+    ]
+    #
+    # models_for_bars = [
+    #     'deit_blur0_BS128', 'deit_blur0_tchr_RegNetY-160_hard_BS128',
+    #     'deit_blur4_BS128',
+    #     'deit_blur0-4_BS128', 'deit_blur0-4_tchr_RegNetY-160_hard_BS128',
+    #     'deit_blur8_BS128',
+    #     'deit_blur0-8_BS128', 'deit_blur0-8_tchr_RegNetY-160_hard_BS128',
+    #     'deit_blur12_BS128',
+    #     'deit_blur16_BS128',
+    #     'deit_blur0-16_BS128', 'deit_blur0-16_tchr_RegNetY-160_hard_BS128'
+    # ]
+
+    models_for_bars = [
+        'deit_blur0_BS128',
+        'deit_blur8_BS128',
+        'deit_blur0-8_BS128'
+    ]
+
     metric = ['test_acc1']  # Choose: train_loss / test_loss / test_acc1 / test_acc5 / train_lr
     # metrics = ['train_loss', 'test_loss', 'train_lr', 'test_acc1']
     # plot_bars(models, test_blur='min')
+    plot_bars(models_for_bars, 'max')
+    plot_metric(models_seed, metric, 'max', ls_dict={'tchr_RegNet': '--', 'tchr_preRes': ':'})
+    plot_metric(models_comp_BS128, metric, 'max', ls_dict={'BS128': '--'})
     plot_metric(models_cleaner_fig, metric, 'max')
+    plot_metric(models_all_BS128, metric, 'max')
+    plot_bars(models_seed, 'max')
