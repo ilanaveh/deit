@@ -110,17 +110,17 @@ model_out_dict = {
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~` 25/2/26 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Taken model list from 'deit_plot_performance.py' ('models_seed').
 models = [
-        # 'deit_blur0_BS128',
+        'deit_blur0_BS128',
         'deit_blur0_tchr_RegNetY-160_hard_BS128',
         ## 'deit_blur2_BS128', 'deit_blur2_tchr_RegNetY-160_hard_BS128',
         ## 'deit_blur0-2_BS128', 'deit_blur0-2_tchr_RegNetY-160_hard_BS128',
         ## 'deit_blur4_BS128', 'deit_blur4_tchr_RegNetY-160_hard_BS128',
         ## 'deit_blur0-4_BS128', 'deit_blur0-4_tchr_RegNetY-160_hard_BS128',
-        # 'deit_blur8_BS128',
+        'deit_blur8_BS128',
         'deit_blur8_tchr_RegNetY-160_hard_BS128',
-        # 'deit_blur0-8_BS128',
+        'deit_blur0-8_BS128',
         'deit_blur0-8_tchr_RegNetY-160_hard_BS128',
-        # 'deit_blur16_BS128',
+        'deit_blur16_BS128',
         'deit_blur16_tchr_RegNetY-160_hard_BS128',
         'deit_blur8-16_BS128',
         'deit_blur0-16_BS128', 'deit_blur0-16_tchr_RegNetY-160_hard_BS128',
@@ -160,6 +160,7 @@ for mdl in models:
 
 if write2file:
     with open(out_pth, "a", encoding="utf-8") as f:
-        f.write("=" * 60)
+        f.write("\n")
+        f.write("=" * 100)
         f.write("\n")
 print('done')
