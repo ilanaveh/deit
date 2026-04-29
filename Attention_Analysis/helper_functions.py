@@ -5,7 +5,7 @@ Helper functions for Attention_Analysis code.
 from timm.models import create_model
 import torch
 import os
-from attention_wrapper import AttentionWithAttnMap
+from module_wrappers import AttentionWithAttnMap
 from torchvision import transforms
 from PIL import Image, ImageFilter
 
@@ -52,7 +52,7 @@ def replace_attention_with_map(model):
 
 def get_model_with_attn(model_path=None):
     # (Based on code in intermediate / deit_probe_intermediate.py)
-    # Create deit model with parameters according to those given in main.py:
+    # Create deit model with parameters according to those given in main_downstream.py:
     model = create_model(
         'deit_base_patch16_224',
         pretrained=True,
@@ -68,7 +68,7 @@ def get_model_with_attn(model_path=None):
     # Replace Attention blocks, with modified blocks that enable access to attention maps:
     replace_attention_with_map(model)
 
-    # Turn fused_attn to false, so we get access to attention-maps (relies on adding line 101 to 'attention_wrapper.py')
+    # Turn fused_attn to false, so we get access to attention-maps (relies on adding line 101 to 'module_wrappers.py')
     for block in model.blocks:
         block.attn.fused_attn = False
 
