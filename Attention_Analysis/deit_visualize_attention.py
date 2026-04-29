@@ -32,21 +32,23 @@ test_performance = True
 save_performance_dir = 'models_performance_per_image'
 
 # Insert blur sigma:
-blur = 16  # Input blur
+blur = 0  # Input blur
 show_im_with_blur = True  # whether to visualize images with chosen input blur (if False - visualize high-res).
 
 layer_indices = [4]  # np.arange(12)
 head_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
 lyr_mode = 'mean'  # 'mean' (mean across attention heads of each layer) / 'all'
 
-patch_coord = [3, 5]  # [] - CLS token, [3, 5] - left eye. [5, 5] - mouth. [5, 8] / [6, 9] - jacket collar. [] - jacket
+patch_coord = [] #[3, 5]  # [] - CLS token, [3, 5] - left eye. [5, 5] - mouth. [5, 8] / [6, 9] - jacket collar. [] - jacket
 cmp_mode = 'layers'  # 'models' (fig for each layer, compare models) / 'layers' (fig for each model, compare layers)
 if cmp_mode == 'layers':
     layer_indices = np.arange(12)
 
 # Insert model name, or '' for original (pretrained):
-model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
-               'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new']
+# model_names = ['', 'deit_blur0_tmp_new', 'deit_blur16_tmp_new', 'deit_blur32_tmp_new',
+#                'deit_blur0-16_tmp_fix_bug', 'deit_blur16-32_tmp', 'deit_blur0-32_tmp_new']
+
+model_names = ['', 'deit_blur0_tmp_new']
 
 
 # -------------------- UTILITIES --------------------
